@@ -30,6 +30,7 @@ export default function Dashboard() {
   const [urlInputs, setUrlInputs] = useState(['']);
   const [trainingSites, setTrainingSites] = useState<Set<string>>(new Set());
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [trainingJobs, setTrainingJobs] = useState<Map<string, TrainingJob>>(new Map());
   const supabase = createSupabaseClient();
   const channelRef = useRef<any>(null);
 
@@ -189,6 +190,43 @@ export default function Dashboard() {
         data.filter((s: Site) => s.status === 'training').map((s: Site) => s.id)
       );
       setTrainingSites(training);
+
+      // Training中のサイトの最新ジョブを取得
+      if (training.size > 0) {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (session) {
+          const jobPromises = Array.from(training).map(async (siteId) => {
+            try {
+              const jobResponse = await fetch(`/api/training-jobs/${siteId}`, {
+                headers: {
+                  Authorization: `Bearer ${session.access_token}`,
+                },
+              });
+              if (jobResponse.ok) {
+                const jobs: TrainingJob[] = await jobResponse.json();
+                const runningJob = jobs.find((j) => j.status === 'running' || j.status === 'pending');
+                if (runningJob) {
+                  return { siteId, job: runningJob };
+                }
+              }
+            } catch (error) {
+              console.error(`Error fetching job for site ${siteId}:`, error);
+            }
+            return null;
+          });
+
+          const jobResults = await Promise.all(jobPromises);
+          const jobsMap = new Map<string, TrainingJob>();
+          jobResults.forEach((result) => {
+            if (result) {
+              jobsMap.set(result.siteId, result.job);
+            }
+          });
+          setTrainingJobs(jobsMap);
+        }
+      }
     } catch (error) {
       console.error('Error fetching sites:', error);
     }
@@ -420,6 +458,28 @@ export default function Dashboard() {
                     <div>
                       <span className="font-medium">最終学習:</span>{' '}
                       <span className="break-words">{formatDate(site.last_trained_at)}</span>
+                    </div>
+                  )}
+                  {site.status === 'training' && trainingJobs.has(site.id) && (
+                    <div className="mt-3">
+                      <div className="flex justify-between text-xs text-gray-600 mb-1">
+                        <span className="font-medium">学習進捗</span>
+                        <span>
+                          {trainingJobs.get(site.id)?.processed_pages || 0} / {trainingJobs.get(site.id)?.total_pages || 0}
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                          style={{
+                            width: `${
+                              trainingJobs.get(site.id)?.total_pages
+                                ? ((trainingJobs.get(site.id)?.processed_pages || 0) / trainingJobs.get(site.id)!.total_pages) * 100
+                                : 0
+                            }%`,
+                          }}
+                        />
+                      </div>
                     </div>
                   )}
                 </div>
