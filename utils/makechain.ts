@@ -5,6 +5,7 @@ import { PromptTemplate } from '@langchain/core/prompts';
 import { RunnableSequence, RunnablePassthrough } from '@langchain/core/runnables';
 import { StringOutputParser } from '@langchain/core/output_parsers';
 import { Document } from '@langchain/core/documents';
+import { CallbackManager } from '@langchain/core/callbacks/manager';
 
 // Document配列を文字列に変換する関数
 const formatDocumentsAsString = (documents: Document[]): string => {
@@ -51,9 +52,16 @@ export const makeChain = (
 
   // 回答生成用のLLM（ストリーミング対応）
   const answerLLM = new ChatOpenAI({
-      temperature: 0,
+    temperature: 0,
     model: 'gpt-4o-mini',
-      streaming: Boolean(onTokenStream),
+    streaming: Boolean(onTokenStream),
+    callbacks: onTokenStream ? CallbackManager.fromHandlers({
+      async handleLLMNewToken(token: string) {
+        if (onTokenStream) {
+          onTokenStream(token);
+        }
+      },
+    }) : undefined,
   });
 
   // 質問を独立した質問に変換するチェーン

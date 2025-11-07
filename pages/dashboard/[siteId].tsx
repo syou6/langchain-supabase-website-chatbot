@@ -267,7 +267,7 @@ export default function SiteChat() {
         return;
       }
 
-      fetchEventSource('/api/chat', {
+      await fetchEventSource('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -279,15 +279,21 @@ export default function SiteChat() {
           site_id: siteId,
         }),
         signal: ctrl.signal,
-        onmessage: (event) => {
-          if (event.data === '[DONE]') {
+        onopen: async (response) => {
+          if (response.ok && response.status === 200) {
+            if (process.env.NODE_ENV === 'development') {
+              console.log('[Chat] Connection opened');
+            }
+          } else if (response.status >= 400 && response.status < 500 && response.status !== 429) {
+            const errorText = await response.text();
+            console.error('[Chat] Client error:', response.status, errorText);
             setMessageState((state) => ({
-              history: [...state.history, [question, state.pending ?? '']],
+              ...state,
               messages: [
                 ...state.messages,
                 {
                   type: 'apiMessage',
-                  message: state.pending ?? '',
+                  message: `エラー: ${response.status} ${errorText || 'リクエストエラー'}`,
                 },
               ],
               pending: undefined,
@@ -295,28 +301,101 @@ export default function SiteChat() {
             setLoading(false);
             ctrl.abort();
           } else {
-            const data = JSON.parse(event.data);
-            if (data.error) {
-              setMessageState((state) => ({
-                ...state,
+            console.error('[Chat] Server error:', response.status);
+            setMessageState((state) => ({
+              ...state,
+              messages: [
+                ...state.messages,
+                {
+                  type: 'apiMessage',
+                  message: `エラー: サーバーエラー (${response.status})`,
+                },
+              ],
+              pending: undefined,
+            }));
+            setLoading(false);
+            ctrl.abort();
+          }
+        },
+        onmessage: (event) => {
+          if (process.env.NODE_ENV === 'development') {
+            console.log('[Chat] Received message:', event.data);
+          }
+          if (event.data === '[DONE]') {
+            setMessageState((state) => {
+              if (process.env.NODE_ENV === 'development') {
+                console.log('[Chat] Stream completed, final pending length:', state.pending?.length || 0);
+              }
+              return {
+                history: [...state.history, [question, state.pending ?? '']],
                 messages: [
                   ...state.messages,
                   {
                     type: 'apiMessage',
-                    message: `エラー: ${data.error}`,
+                    message: state.pending ?? '',
                   },
                 ],
                 pending: undefined,
-              }));
-              setLoading(false);
-              ctrl.abort();
-            } else {
-              setMessageState((state) => ({
-                ...state,
-                pending: (state.pending ?? '') + data.data,
-              }));
+              };
+            });
+            setLoading(false);
+            ctrl.abort();
+          } else {
+            try {
+              const data = JSON.parse(event.data);
+              if (process.env.NODE_ENV === 'development') {
+                console.log('[Chat] Parsed data:', data);
+              }
+              if (data.error) {
+                setMessageState((state) => ({
+                  ...state,
+                  messages: [
+                    ...state.messages,
+                    {
+                      type: 'apiMessage',
+                      message: `エラー: ${data.error}`,
+                    },
+                  ],
+                  pending: undefined,
+                }));
+                setLoading(false);
+                ctrl.abort();
+              } else {
+                const token = data.data || '';
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('[Chat] Adding token:', token);
+                }
+                setMessageState((state) => {
+                  const newPending = (state.pending ?? '') + token;
+                  if (process.env.NODE_ENV === 'development') {
+                    console.log('[Chat] New pending length:', newPending.length);
+                  }
+                  return {
+                    ...state,
+                    pending: newPending,
+                  };
+                });
+              }
+            } catch (parseError) {
+              console.error('[Chat] Failed to parse message:', parseError, event.data);
             }
           }
+        },
+        onerror: (err) => {
+          console.error('[Chat] EventSource error:', err);
+          setMessageState((state) => ({
+            ...state,
+            messages: [
+              ...state.messages,
+              {
+                type: 'apiMessage',
+                message: 'エラー: 接続エラーが発生しました。もう一度お試しください。',
+              },
+            ],
+            pending: undefined,
+          }));
+          setLoading(false);
+          throw err; // 再試行を停止
         },
       });
     } catch (error) {

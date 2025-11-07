@@ -97,19 +97,31 @@ export default async function handler(
   const model = openai;
   // create the chain with streaming callback
   const chain = makeChain(vectorStore, (token: string) => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Chat API] Streaming token:', token.substring(0, 50));
+    }
     sendData(JSON.stringify({ data: token }));
   }, retriever);
 
   try {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Chat API] Starting chain invoke for question:', sanitizedQuestion.substring(0, 100));
+    }
     //Ask a question with streaming (onTokenStream callback will handle streaming)
     await chain.invoke({
       question: sanitizedQuestion,
       chat_history: history || [],
     });
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Chat API] Chain invoke completed');
+    }
   } catch (error) {
-    console.log('error', error);
+    console.error('[Chat API] Error:', error);
     sendData(JSON.stringify({ error: String(error) }));
   } finally {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Chat API] Sending [DONE]');
+    }
     sendData('[DONE]');
     res.end();
   }

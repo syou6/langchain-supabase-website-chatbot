@@ -181,10 +181,27 @@ export default function Dashboard() {
           },
           (payload) => {
             // サイトの変更を検知したら再取得
+            if (process.env.NODE_ENV === 'development') {
+              console.log('[Realtime] Sites table changed, fetching sites...', payload);
+            }
             fetchSitesWithAuth();
           }
         )
-        .subscribe();
+        .subscribe((status) => {
+          // デバッグ用: チャンネルの接続状態をログ出力（開発環境のみ）
+          if (process.env.NODE_ENV === 'development') {
+            if (status === 'SUBSCRIBED') {
+              console.log('[Realtime] Sites channel subscribed');
+            } else if (status === 'CHANNEL_ERROR') {
+              console.error('[Realtime] Sites channel error');
+            } else {
+              console.log('[Realtime] Sites channel status:', status);
+            }
+          } else if (status === 'CHANNEL_ERROR') {
+            // 本番環境でもエラーは記録
+            console.error('[Realtime] Sites channel error');
+          }
+        });
     };
 
     setupRealtime();
@@ -317,8 +334,22 @@ export default function Dashboard() {
         trainingJobsChannelRef.current = null;
       }
 
-      if (!session || trainingSites.size === 0) {
+      if (!session) {
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[Realtime] Training jobs channel: No session, skipping');
+        }
         return;
+      }
+
+      if (trainingSites.size === 0) {
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[Realtime] Training jobs channel: No training sites, skipping');
+        }
+        return;
+      }
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[Realtime] Setting up training jobs channel for ${trainingSites.size} site(s)`);
       }
 
       trainingJobsChannelRef.current = supabase
@@ -338,10 +369,30 @@ export default function Dashboard() {
                 next.set(job.site_id, job);
                 return next;
               });
+              
+              // training_jobsがcompletedになったらsitesを再取得してstatus='ready'を反映
+              if (job.status === 'completed') {
+                if (process.env.NODE_ENV === 'development') {
+                  console.log(`[Realtime] Training job completed for site ${job.site_id}, fetching sites...`);
+                }
+                fetchSites();
+              }
             }
           },
         )
-        .subscribe();
+        .subscribe((status) => {
+          // デバッグ用: チャンネルの接続状態をログ出力（開発環境のみ）
+          if (process.env.NODE_ENV === 'development') {
+            if (status === 'SUBSCRIBED') {
+              console.log('[Realtime] Training jobs channel subscribed');
+            } else if (status === 'CHANNEL_ERROR') {
+              console.error('[Realtime] Training jobs channel error');
+            }
+          } else if (status === 'CHANNEL_ERROR') {
+            // 本番環境でもエラーは記録
+            console.error('[Realtime] Training jobs channel error');
+          }
+        });
     };
 
     setupTrainingJobsRealtime();
