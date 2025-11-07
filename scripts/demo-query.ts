@@ -11,7 +11,7 @@ const model = openai;
 async function searchForDocs() {
   const vectorStore = await SupabaseVectorStore.fromExistingIndex(
     supabaseClient,
-    new OpenAIEmbeddings(),
+    new OpenAIEmbeddings({ modelName: 'text-embedding-3-small' }),
   );
 
   /*uncomment below to test similarity search */

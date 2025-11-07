@@ -1,10 +1,10 @@
-import { Document } from 'langchain/document';
+import { Document } from '@langchain/core/documents';
 import * as fs from 'fs/promises';
 import { CustomWebLoader } from '@/utils/custom_web_loader';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { Embeddings, OpenAIEmbeddings } from 'langchain/embeddings';
-import { SupabaseVectorStore } from 'langchain/vectorstores';
-import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
+import { OpenAIEmbeddings } from '@langchain/openai';
+import { SupabaseVectorStore } from '@langchain/community/vectorstores/supabase';
+import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
 import { supabaseClient } from '@/utils/supabase-client';
 import { urls } from '@/config/notionurls';
 
@@ -36,10 +36,13 @@ async function extractDataFromUrls(urls: string[]): Promise<Document[]> {
 async function embedDocuments(
   client: SupabaseClient,
   docs: Document[],
-  embeddings: Embeddings,
+  embeddings: OpenAIEmbeddings,
 ) {
   console.log('creating embeddings...');
-  await SupabaseVectorStore.fromDocuments(client, docs, embeddings);
+  await SupabaseVectorStore.fromDocuments(docs, embeddings, {
+    client,
+    tableName: 'documents',
+  });
   console.log('embeddings successfully stored in supabase');
 }
 
@@ -58,7 +61,10 @@ async function splitDocsIntoChunks(docs: Document[]): Promise<Document[]> {
     //split docs into chunks for openai context window
     const docs = await splitDocsIntoChunks(rawDocs);
     //embed docs into supabase
-    await embedDocuments(supabaseClient, docs, new OpenAIEmbeddings());
+    await embedDocuments(supabaseClient, docs, new OpenAIEmbeddings({ 
+      model: 'text-embedding-3-small',
+      dimensions: 512 
+    }));
   } catch (error) {
     console.log('error occured:', error);
   }

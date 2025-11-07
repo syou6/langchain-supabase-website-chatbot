@@ -1,7 +1,14 @@
--- Enable the pgvector extension to work with embedding vectors
-create extension vector;
+-- 既存のテーブルと関数を削除（既に存在する場合）
+drop index if exists documents_embedding_idx;
+drop function if exists match_documents(vector, int, jsonb);
+drop function if exists match_documents(jsonb, int, vector);
+drop function if exists match_documents(vector, int);
+drop table if exists documents;
 
--- Create a table to store your documents
+-- Enable the pgvector extension to work with embedding vectors
+create extension if not exists vector;
+
+-- Create a table to store your documents (512 dimensions for text-embedding-3-small)
 create table documents (
   id bigserial primary key,
   content text, -- corresponds to Document.pageContent
@@ -41,3 +48,4 @@ $$;
 create index on documents
   using ivfflat (embedding vector_cosine_ops)
   with (lists = 100);
+

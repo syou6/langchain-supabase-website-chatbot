@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { OpenAIEmbeddings } from 'langchain/embeddings';
-import { SupabaseVectorStore } from 'langchain/vectorstores';
+import { OpenAIEmbeddings } from '@langchain/openai';
+import { SupabaseVectorStore } from '@langchain/community/vectorstores/supabase';
 import { openai } from '@/utils/openai-client';
 import { supabaseClient } from '@/utils/supabase-client';
 import { makeChain } from '@/utils/makechain';
@@ -18,9 +18,17 @@ export default async function handler(
   const sanitizedQuestion = question.trim().replaceAll('\n', ' ');
 
   /* create vectorstore*/
+  const embeddings = new OpenAIEmbeddings({ 
+    model: 'text-embedding-3-small',
+    dimensions: 512 
+  });
   const vectorStore = await SupabaseVectorStore.fromExistingIndex(
-    supabaseClient,
-    new OpenAIEmbeddings(),
+    embeddings,
+    {
+      client: supabaseClient,
+      tableName: 'documents',
+      queryName: 'match_documents',
+    }
   );
 
   res.writeHead(200, {
@@ -36,21 +44,20 @@ export default async function handler(
   sendData(JSON.stringify({ data: '' }));
 
   const model = openai;
-  // create the chain
+  // create the chain with streaming callback
   const chain = makeChain(vectorStore, (token: string) => {
     sendData(JSON.stringify({ data: token }));
   });
 
   try {
-    //Ask a question
-    const response = await chain.call({
+    //Ask a question with streaming (onTokenStream callback will handle streaming)
+    await chain.invoke({
       question: sanitizedQuestion,
       chat_history: history || [],
     });
-
-    console.log('response', response);
   } catch (error) {
     console.log('error', error);
+    sendData(JSON.stringify({ error: String(error) }));
   } finally {
     sendData('[DONE]');
     res.end();
