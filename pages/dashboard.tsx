@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Layout from '@/components/layout';
 import Link from 'next/link';
 import { createSupabaseClient } from '@/utils/supabase-auth';
+import Onboarding from '@/components/Onboarding';
 
 interface Site {
   id: string;
@@ -24,9 +25,13 @@ export default function Dashboard() {
     name: '',
     baseUrl: '',
     sitemapUrl: '',
+    urlList: [] as string[],
   });
+  const [urlInputs, setUrlInputs] = useState(['']);
   const [trainingSites, setTrainingSites] = useState<Set<string>>(new Set());
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const supabase = createSupabaseClient();
+  const channelRef = useRef<any>(null);
 
   // 認証チェック
   useEffect(() => {
@@ -45,6 +50,38 @@ export default function Dashboard() {
 
     checkAuth();
   }, [router, supabase]);
+
+  // オンボーディング表示チェック
+  useEffect(() => {
+    if (authLoading) return;
+
+    const checkOnboarding = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) return;
+
+      const completed = localStorage.getItem(`onboarding_completed_${session.user.id}`);
+      if (completed !== 'true') {
+        // サイトが0件の場合のみオンボーディングを表示
+        const response = await fetch('/api/sites', {
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.length === 0) {
+            setShowOnboarding(true);
+          }
+        }
+      }
+    };
+
+    checkOnboarding();
+  }, [authLoading, supabase]);
 
   // サイト一覧を取得
   useEffect(() => {
@@ -89,14 +126,46 @@ export default function Dashboard() {
 
     fetchSitesWithAuth();
 
-    // 5秒ごとにステータスを更新（Training中のサイトがある場合）
-    const interval = setInterval(() => {
-      if (trainingSites.size > 0) {
-        fetchSitesWithAuth();
+    // Supabase Realtimeでsitesテーブルの変更を監視
+    const setupRealtime = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) return;
+
+      // 既存のチャンネルを削除
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
       }
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [authLoading, trainingSites.size, router, supabase]);
+
+      channelRef.current = supabase
+        .channel('sites-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'sites',
+            filter: `user_id=eq.${session.user.id}`,
+          },
+          (payload) => {
+            // サイトの変更を検知したら再取得
+            fetchSitesWithAuth();
+          }
+        )
+        .subscribe();
+    };
+
+    setupRealtime();
+
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+    };
+  }, [authLoading, router, supabase]);
 
   const fetchSites = async () => {
     const {
@@ -148,6 +217,7 @@ export default function Dashboard() {
           name: formData.name,
           baseUrl: formData.baseUrl,
           sitemapUrl: formData.sitemapUrl || null,
+          urlList: formData.urlList.length > 0 ? formData.urlList.join('\n') : null,
         }),
       });
       if (!response.ok) throw new Error('Failed to create site');
@@ -188,6 +258,7 @@ export default function Dashboard() {
           site_id: siteId,
           baseUrl: site.base_url,
           sitemapUrl: site.sitemap_url,
+          urlList: (site as any).url_list ? String((site as any).url_list) : null,
         }),
       });
       if (!response.ok) throw new Error('Failed to start training');
@@ -278,22 +349,30 @@ export default function Dashboard() {
 
   return (
     <Layout>
-      <div className="container mx-auto px-4 py-8 max-w-6xl">
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold">ダッシュボード</h1>
-          <div className="flex gap-2">
+      {showOnboarding && (
+        <Onboarding
+          onComplete={() => {
+            setShowOnboarding(false);
+          }}
+        />
+      )}
+      <div className="container mx-auto px-4 py-4 md:py-8 max-w-6xl">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 md:mb-8">
+          <h1 className="text-2xl md:text-3xl font-bold">ダッシュボード</h1>
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
             <button
               onClick={async () => {
                 await supabase.auth.signOut();
                 router.push('/auth/login');
               }}
-              className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg font-medium"
+              className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg font-medium text-sm md:text-base"
             >
               ログアウト
             </button>
             <button
+              id="onboarding-create-site-btn"
               onClick={() => setShowModal(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium text-sm md:text-base"
             >
               + 新規サイト登録
             </button>
@@ -311,18 +390,20 @@ export default function Dashboard() {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
             {sites.map((site) => (
               <div
                 key={site.id}
-                className="bg-white rounded-lg shadow-md p-6 border border-gray-200 hover:shadow-lg transition-shadow"
+                className="bg-white rounded-lg shadow-md p-4 md:p-6 border border-gray-200 hover:shadow-lg transition-shadow"
               >
-                <div className="flex justify-between items-start mb-4">
-                  <h2 className="text-xl font-semibold text-gray-900">{site.name}</h2>
-                  {getStatusBadge(site.status)}
+                <div className="flex justify-between items-start mb-3 md:mb-4 gap-2">
+                  <h2 className="text-lg md:text-xl font-semibold text-gray-900 flex-1 break-words">
+                    {site.name}
+                  </h2>
+                  <div className="flex-shrink-0">{getStatusBadge(site.status)}</div>
                 </div>
 
-                <div className="space-y-2 mb-4 text-sm text-gray-600">
+                <div className="space-y-2 mb-4 text-xs md:text-sm text-gray-600">
                   <div>
                     <span className="font-medium">URL:</span>{' '}
                     <a
@@ -337,22 +418,32 @@ export default function Dashboard() {
                   {site.last_trained_at && (
                     <div>
                       <span className="font-medium">最終学習:</span>{' '}
-                      {formatDate(site.last_trained_at)}
+                      <span className="break-words">{formatDate(site.last_trained_at)}</span>
                     </div>
                   )}
                 </div>
 
-                <div className="flex gap-2 mt-4">
+                <div className="flex flex-col sm:flex-row gap-2 mt-4">
                   {site.status === 'ready' && (
-                    <Link
-                      href={`/dashboard/${site.id}`}
-                      className="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-center text-sm font-medium"
-                    >
-                      チャット開始
-                    </Link>
+                    <>
+                      <Link
+                        id="onboarding-chat-btn"
+                        href={`/dashboard/${site.id}`}
+                        className="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-center text-sm font-medium"
+                      >
+                        チャット開始
+                      </Link>
+                      <button
+                        onClick={() => handleStartTraining(site.id)}
+                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
+                      >
+                        再学習
+                      </button>
+                    </>
                   )}
                   {site.status === 'idle' && (
                     <button
+                      id="onboarding-start-training-btn"
                       onClick={() => handleStartTraining(site.id)}
                       className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
                     >
@@ -367,9 +458,17 @@ export default function Dashboard() {
                       学習中...
                     </button>
                   )}
+                  {site.status === 'error' && (
+                    <button
+                      onClick={() => handleStartTraining(site.id)}
+                      className="flex-1 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
+                    >
+                      再学習
+                    </button>
+                  )}
                   <button
                     onClick={() => handleDeleteSite(site.id)}
-                    className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
+                    className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium sm:w-auto w-full"
                   >
                     削除
                   </button>
@@ -381,9 +480,9 @@ export default function Dashboard() {
 
         {/* 新規サイト登録Modal */}
         {showModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-              <h2 className="text-2xl font-bold mb-4">新規サイト登録</h2>
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-4 md:p-6 max-w-md w-full max-h-[90vh] overflow-y-auto">
+              <h2 className="text-xl md:text-2xl font-bold mb-4">新規サイト登録</h2>
               <form onSubmit={handleCreateSite}>
                 <div className="space-y-4">
                   <div>
@@ -397,7 +496,7 @@ export default function Dashboard() {
                       onChange={(e) =>
                         setFormData({ ...formData, name: e.target.value })
                       }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm md:text-base"
                       placeholder="例: STRIX 総合型選抜塾"
                     />
                   </div>
@@ -412,7 +511,7 @@ export default function Dashboard() {
                       onChange={(e) =>
                         setFormData({ ...formData, baseUrl: e.target.value })
                       }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm md:text-base"
                       placeholder="https://example.com"
                     />
                   </div>
@@ -426,25 +525,154 @@ export default function Dashboard() {
                       onChange={(e) =>
                         setFormData({ ...formData, sitemapUrl: e.target.value })
                       }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm md:text-base"
                       placeholder="https://example.com/sitemap.xml"
                     />
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      URLリスト（オプション）
+                    </label>
+                    <div className="space-y-2 mb-2">
+                      {urlInputs.map((urlInput, index) => (
+                        <div key={index} className="flex gap-2">
+                          <input
+                            type="url"
+                            value={urlInput}
+                            onChange={(e) => {
+                              const newInputs = [...urlInputs];
+                              newInputs[index] = e.target.value;
+                              setUrlInputs(newInputs);
+                            }}
+                            onBlur={() => {
+                              // 入力が完了したら、有効なURLをリストに追加
+                              const trimmedUrl = urlInput.trim();
+                              if (
+                                trimmedUrl &&
+                                (trimmedUrl.startsWith('http://') || trimmedUrl.startsWith('https://')) &&
+                                !formData.urlList.includes(trimmedUrl)
+                              ) {
+                                setFormData({
+                                  ...formData,
+                                  urlList: [...formData.urlList, trimmedUrl],
+                                });
+                                // 入力フィールドをクリア
+                                const newInputs = [...urlInputs];
+                                newInputs[index] = '';
+                                setUrlInputs(newInputs);
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                const trimmedUrl = urlInput.trim();
+                                if (
+                                  trimmedUrl &&
+                                  (trimmedUrl.startsWith('http://') || trimmedUrl.startsWith('https://')) &&
+                                  !formData.urlList.includes(trimmedUrl)
+                                ) {
+                                  setFormData({
+                                    ...formData,
+                                    urlList: [...formData.urlList, trimmedUrl],
+                                  });
+                                  // 入力フィールドをクリア
+                                  const newInputs = [...urlInputs];
+                                  newInputs[index] = '';
+                                  setUrlInputs(newInputs);
+                                }
+                              }
+                            }}
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm md:text-base"
+                            placeholder="https://example.com/page1"
+                          />
+                          {index === urlInputs.length - 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setUrlInputs([...urlInputs, '']);
+                              }}
+                              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg font-medium text-sm whitespace-nowrap flex items-center justify-center"
+                              aria-label="URL入力フィールドを追加"
+                            >
+                              <svg
+                                className="w-5 h-5"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M12 4v16m8-8H4"
+                                />
+                              </svg>
+                            </button>
+                          )}
+                          {urlInputs.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                // 入力フィールドを削除
+                                const newInputs = urlInputs.filter((_, i) => i !== index);
+                                setUrlInputs(newInputs.length > 0 ? newInputs : ['']);
+                              }}
+                              className="bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded-lg font-medium text-sm whitespace-nowrap"
+                              aria-label="この入力フィールドを削除"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    {formData.urlList.length > 0 && (
+                      <div className="border border-gray-300 rounded-lg p-2 max-h-40 overflow-y-auto mb-2">
+                        <div className="space-y-1">
+                          {formData.urlList.map((url, index) => (
+                            <div
+                              key={index}
+                              className="flex items-center justify-between bg-gray-50 px-2 py-1 rounded text-sm"
+                            >
+                              <span className="flex-1 truncate font-mono text-xs">{url}</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setFormData({
+                                    ...formData,
+                                    urlList: formData.urlList.filter((_, i) => i !== index),
+                                  });
+                                }}
+                                className="ml-2 text-red-600 hover:text-red-800 text-xs"
+                                aria-label="削除"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <p className="text-xs text-gray-500 mt-1">
+                      サイトマップURLより優先されます。「+」ボタンで入力フィールドを追加できます。
+                    </p>
+                  </div>
                 </div>
-                <div className="flex gap-3 mt-6">
+                <div className="flex flex-col sm:flex-row gap-3 mt-6">
                   <button
                     type="button"
                     onClick={() => {
                       setShowModal(false);
-                      setFormData({ name: '', baseUrl: '', sitemapUrl: '' });
+                      setFormData({ name: '', baseUrl: '', sitemapUrl: '', urlList: [] });
+      setUrlInputs(['']);
                     }}
-                    className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg font-medium"
+                    className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg font-medium text-sm md:text-base"
                   >
                     キャンセル
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium"
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium text-sm md:text-base"
                   >
                     登録
                   </button>

@@ -47,10 +47,20 @@ export default async function handler(
         // ベクトルは配列形式で渡す（Supabaseが自動的にvector型に変換）
         const { data, error } = await supabaseClient.rpc('match_documents', {
           query_embedding: queryEmbedding,
-          match_count: 5,
+          match_count: 10, // 5→10に増やして精度向上
           filter: {},
           match_site_id: site_id,
         });
+        
+        // デバッグログ：取得されたドキュメント数とsimilarityスコア
+        console.log(`[RAG] Retrieved ${data?.length || 0} documents for site_id: ${site_id}`);
+        if (data && data.length > 0) {
+          const similarities = data.map((d: any) => d.similarity);
+          console.log(`[RAG] Similarity scores:`, similarities);
+          console.log(`[RAG] Average similarity:`, similarities.reduce((a: number, b: number) => a + b, 0) / similarities.length);
+        } else {
+          console.warn(`[RAG] No documents found for site_id: ${site_id}`);
+        }
 
         if (error) {
           throw error;

@@ -11,27 +11,177 @@ interface TrainRequest {
   site_id: string;
   baseUrl: string;
   sitemapUrl?: string;
+  urlList?: string;
 }
 
-// SitemapからURLリストを取得
+// SitemapからURLリストを取得（サイトマップインデックス対応）
 async function getUrlsFromSitemap(sitemapUrl: string): Promise<string[]> {
   try {
     const response = await fetch(sitemapUrl);
     const xml = await response.text();
-    const urlMatches = xml.match(/<loc>(.*?)<\/loc>/g);
-    if (!urlMatches) return [];
-    return urlMatches.map((match) => match.replace(/<\/?loc>/g, ''));
+    
+    // サイトマップインデックス（sitemapindex.xml）かどうかを確認
+    if (xml.includes('<sitemapindex')) {
+      // サイトマップインデックスの場合、各サイトマップのURLを取得
+      const sitemapMatches = xml.match(/<sitemap>[\s\S]*?<loc>(.*?)<\/loc>[\s\S]*?<\/sitemap>/g);
+      if (!sitemapMatches) return [];
+      
+      const sitemapUrls = sitemapMatches.map((match) => {
+        const locMatch = match.match(/<loc>(.*?)<\/loc>/);
+        if (!locMatch) return null;
+        let url = locMatch[1];
+        // CDATAセクションを処理
+        url = url.replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1');
+        return url.trim();
+      }).filter((url): url is string => url !== null && url.length > 0);
+      
+      // 各サイトマップからURLを取得（並列処理）
+      const urlPromises = sitemapUrls.map((url) => getUrlsFromSitemap(url));
+      const urlArrays = await Promise.all(urlPromises);
+      
+      // 重複を除去して返す
+      const allUrls = urlArrays.flat();
+      return Array.from(new Set(allUrls));
+    } else {
+      // 通常のサイトマップの場合
+      const urlMatches = xml.match(/<url>[\s\S]*?<loc>(.*?)<\/loc>[\s\S]*?<\/url>/g);
+      if (!urlMatches) {
+        // <url>タグがない場合、<loc>タグを直接検索（後方互換性）
+        const simpleMatches = xml.match(/<loc>(.*?)<\/loc>/g);
+        if (!simpleMatches) return [];
+        return simpleMatches
+          .map((match) => {
+            const url = match.replace(/<\/?loc>/g, '');
+            // CDATAセクションを処理
+            return url.replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1').trim();
+          })
+          .filter((url) => url.length > 0);
+      }
+      
+      // <url>タグ内の<loc>を抽出
+      const urls = urlMatches.map((match) => {
+        const locMatch = match.match(/<loc>(.*?)<\/loc>/);
+        if (!locMatch) return null;
+        let url = locMatch[1];
+        // CDATAセクションを処理
+        url = url.replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1');
+        return url.trim();
+      }).filter((url): url is string => url !== null && url.length > 0);
+      
+      return urls;
+    }
   } catch (error) {
     console.error('Error fetching sitemap:', error);
     return [];
   }
 }
 
-// BaseURLからURLリストを生成（簡易版：最初はbaseUrlのみ）
-async function getUrlsFromBaseUrl(baseUrl: string): Promise<string[]> {
-  // 将来的にはクローラーでリンクを辿る実装も可能
-  // 今はbaseUrlのみを返す
-  return [baseUrl];
+// BaseURLからURLリストを生成（サイトマップの自動検出を試行）
+// 戻り値: { urls: string[], detectedSitemapUrl?: string, detectionMethod?: string }
+async function getUrlsFromBaseUrl(baseUrl: string): Promise<{
+  urls: string[];
+  detectedSitemapUrl?: string;
+  detectionMethod?: string;
+}> {
+  // 一般的なサイトマップのパスを試行
+  const commonSitemapPaths = [
+    '/sitemap.xml',
+    '/sitemap_index.xml',
+    '/sitemap-index.xml',
+    '/sitemap1.xml',
+    '/sitemap.txt',
+  ];
+  
+  // ベースURLを正規化（末尾のスラッシュを削除）
+  const normalizedBaseUrl = baseUrl.replace(/\/$/, '');
+  const attemptedPaths: string[] = [];
+  
+  // 各サイトマップパスを試行
+  for (const path of commonSitemapPaths) {
+    try {
+      const sitemapUrl = `${normalizedBaseUrl}${path}`;
+      attemptedPaths.push(sitemapUrl);
+      const response = await fetch(sitemapUrl, { method: 'HEAD' });
+      
+      console.log(`[Sitemap Detection] Trying: ${sitemapUrl} - Status: ${response.status}`);
+      
+      // 200 OK または Content-Type が XML の場合
+      if (response.ok) {
+        const contentType = response.headers.get('content-type');
+        console.log(`[Sitemap Detection] Content-Type: ${contentType}`);
+        
+        if (contentType && contentType.includes('xml')) {
+          console.log(`[Sitemap Detection] Found sitemap at: ${sitemapUrl}`);
+          const urls = await getUrlsFromSitemap(sitemapUrl);
+          console.log(`[Sitemap Detection] Extracted ${urls.length} URLs from sitemap`);
+          
+          if (urls.length > 0) {
+            return {
+              urls,
+              detectedSitemapUrl: sitemapUrl,
+              detectionMethod: `自動検出（${path}）`,
+            };
+          } else {
+            console.log(`[Sitemap Detection] Sitemap found but no URLs extracted from: ${sitemapUrl}`);
+          }
+        } else {
+          console.log(`[Sitemap Detection] Content-Type is not XML: ${contentType}`);
+        }
+      } else {
+        console.log(`[Sitemap Detection] HTTP ${response.status} for: ${sitemapUrl}`);
+      }
+    } catch (error) {
+      console.log(`[Sitemap Detection] Error fetching ${normalizedBaseUrl}${path}:`, error);
+      // 次のパスを試行
+      continue;
+    }
+  }
+  
+  console.log(`[Sitemap Detection] Attempted paths: ${attemptedPaths.join(', ')}`);
+  
+  // サイトマップが見つからない場合、robots.txtを確認
+  try {
+    const robotsUrl = `${normalizedBaseUrl}/robots.txt`;
+    console.log(`[Sitemap Detection] Checking robots.txt: ${robotsUrl}`);
+    const robotsResponse = await fetch(robotsUrl);
+    
+    if (robotsResponse.ok) {
+      const robotsText = await robotsResponse.text();
+      console.log(`[Sitemap Detection] robots.txt found, content length: ${robotsText.length}`);
+      const sitemapMatches = robotsText.match(/Sitemap:\s*(.+)/gi);
+      
+      if (sitemapMatches) {
+        console.log(`[Sitemap Detection] Found ${sitemapMatches.length} Sitemap entries in robots.txt`);
+        for (const match of sitemapMatches) {
+          const sitemapUrl = match.replace(/Sitemap:\s*/i, '').trim();
+          console.log(`[Sitemap Detection] Trying sitemap from robots.txt: ${sitemapUrl}`);
+          const urls = await getUrlsFromSitemap(sitemapUrl);
+          console.log(`[Sitemap Detection] Extracted ${urls.length} URLs from robots.txt sitemap`);
+          
+          if (urls.length > 0) {
+            return {
+              urls,
+              detectedSitemapUrl: sitemapUrl,
+              detectionMethod: '自動検出（robots.txt）',
+            };
+          }
+        }
+      } else {
+        console.log(`[Sitemap Detection] No Sitemap entries found in robots.txt`);
+      }
+    } else {
+      console.log(`[Sitemap Detection] robots.txt not found (HTTP ${robotsResponse.status})`);
+    }
+  } catch (error) {
+    console.log(`[Sitemap Detection] Error checking robots.txt:`, error);
+  }
+  
+  // サイトマップが見つからない場合、baseUrlのみを返す
+  console.log(`[Sitemap Detection] No sitemap found after checking ${attemptedPaths.length} paths and robots.txt, using baseUrl only`);
+  return {
+    urls: [baseUrl],
+    detectionMethod: 'サイトマップ未検出（ベースURLのみ）',
+  };
 }
 
 // URLリストからデータを抽出
@@ -54,8 +204,8 @@ async function extractDataFromUrls(urls: string[]): Promise<Document[]> {
 // ドキュメントをチャンクに分割
 async function splitDocsIntoChunks(docs: Document[]): Promise<Document[]> {
   const textSplitter = new RecursiveCharacterTextSplitter({
-    chunkSize: 2000,
-    chunkOverlap: 200,
+    chunkSize: 1000, // 2000→1000に縮小してより細かく分割（精度向上）
+    chunkOverlap: 200, // オーバーラップは維持
   });
   return await textSplitter.splitDocuments(docs);
 }
@@ -67,39 +217,67 @@ async function embedDocumentsWithSiteId(
   embeddings: OpenAIEmbeddings,
   onProgress?: (processed: number, total: number) => void,
 ): Promise<void> {
-  console.log('creating embeddings...');
+  console.log(`[Training] Creating embeddings for ${docs.length} documents...`);
   
-  // SupabaseVectorStore.fromDocumentsはsite_idを直接指定できないため、
-  // カスタム実装が必要
-  // 一旦、既存の方法で保存してからsite_idを更新する方法を使う
+  // 保存前のタイムスタンプを記録（この時点以降に保存されたドキュメントを特定するため）
+  const beforeInsertTime = new Date();
   
-  // 各ドキュメントにsite_idをmetadataに追加
-  const docsWithSiteId = docs.map((doc) => ({
+  // 各ドキュメントに一意の識別子をmetadataに追加
+  const uniqueId = `site_${siteId}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const docsWithMarker = docs.map((doc) => ({
     ...doc,
     metadata: {
       ...doc.metadata,
-      site_id: siteId,
+      _training_marker: uniqueId, // 一意の識別子
     },
   }));
 
   // SupabaseVectorStoreで保存
-  await SupabaseVectorStore.fromDocuments(docsWithSiteId, embeddings, {
+  await SupabaseVectorStore.fromDocuments(docsWithMarker, embeddings, {
     client: supabaseClient,
     tableName: 'documents',
   });
 
-  // site_idをmetadataから実際のカラムに更新
-  const { error } = await supabaseClient
+  console.log(`[Training] Documents inserted, updating site_id with marker: ${uniqueId}`);
+
+  // 保存直後に、_training_markerが一致し、site_idがNULLのドキュメントにsite_idを設定
+  const { data: updatedDocs, error: updateError } = await supabaseClient
     .from('documents')
     .update({ site_id: siteId })
-    .eq('metadata->>site_id', siteId);
+    .eq('metadata->>_training_marker', uniqueId)
+    .is('site_id', null)
+    .select('id, metadata');
 
-  if (error) {
-    console.error('Error updating site_id:', error);
-    throw error;
+  if (updateError) {
+    console.error('[Training] Error updating site_id:', updateError);
+    throw updateError;
   }
 
-  console.log('embeddings successfully stored in supabase');
+  const updatedCount = updatedDocs?.length || 0;
+  console.log(`[Training] Updated ${updatedCount} documents with site_id`);
+
+  if (updatedCount !== docs.length) {
+    console.warn(`[Training] Warning: Expected to update ${docs.length} documents, but updated ${updatedCount}`);
+  }
+
+  // _training_markerをmetadataから削除（クリーンアップ）
+  if (updatedDocs && updatedDocs.length > 0) {
+    // バッチ更新で効率化
+    const updatePromises = updatedDocs.map(async (doc) => {
+      if (doc.metadata && typeof doc.metadata === 'object') {
+        const { _training_marker, ...cleanMetadata } = doc.metadata as any;
+        return supabaseClient
+          .from('documents')
+          .update({ metadata: cleanMetadata })
+          .eq('id', doc.id);
+      }
+      return Promise.resolve();
+    });
+
+    await Promise.all(updatePromises);
+  }
+
+  console.log('[Training] Embeddings successfully stored in supabase');
 }
 
 export default async function handler(
@@ -114,13 +292,29 @@ export default async function handler(
     // 認証チェック
     const userId = await requireAuth(req);
 
-    const { site_id, baseUrl, sitemapUrl } = req.body as TrainRequest;
+    const { site_id, baseUrl, sitemapUrl, urlList } = req.body as TrainRequest;
+
+    console.log(`[Training] Request body:`, { site_id, baseUrl, sitemapUrl, urlList: urlList ? `${urlList.substring(0, 100)}...` : null });
 
     if (!site_id || !baseUrl) {
       return res.status(400).json({ 
         message: 'site_id and baseUrl are required' 
       });
     }
+
+    // URLリストを事前に処理（非同期処理で使用するため）
+    const processedUrlList = urlList && urlList.trim() 
+      ? urlList.split('\n')
+          .map((url) => url.trim())
+          .filter((url) => url.length > 0 && (url.startsWith('http://') || url.startsWith('https://')))
+      : null;
+
+    console.log(`[Training] Processed URL list:`, { 
+      hasUrlList: !!urlList, 
+      urlListLength: urlList?.length || 0,
+      processedCount: processedUrlList?.length || 0,
+      processedUrls: processedUrlList?.slice(0, 3) || []
+    });
 
     // サイトの所有者を確認
     const { data: site, error: siteCheckError } = await supabaseClient
@@ -181,18 +375,60 @@ export default async function handler(
     // 5. バックグラウンド処理を開始（非同期）
     (async () => {
       try {
-        // URLリストを取得
-        let urls: string[] = [];
-        if (sitemapUrl) {
-          urls = await getUrlsFromSitemap(sitemapUrl);
+        // 再学習の場合、既存のドキュメントを削除（重複を防ぐため）
+        console.log(`[Training] Deleting existing documents for site_id: ${site_id}`);
+        const { error: deleteError } = await supabaseClient
+          .from('documents')
+          .delete()
+          .eq('site_id', site_id);
+        
+        if (deleteError) {
+          console.error('[Training] Error deleting existing documents:', deleteError);
+          // 削除エラーは警告のみ（初回学習の場合は問題ない）
         } else {
-          urls = await getUrlsFromBaseUrl(baseUrl);
+          console.log(`[Training] Deleted existing documents for site_id: ${site_id}`);
+        }
+        
+        // URLリストを取得（優先順位: URLリスト > サイトマップURL > 自動検出 > ベースURLのみ）
+        let urls: string[] = [];
+        let detectedSitemapUrl: string | undefined;
+        let detectionMethod: string | undefined;
+        
+        if (processedUrlList && processedUrlList.length > 0) {
+          // URLリストが指定されている場合（最優先、サイトマップは無視）
+          urls = processedUrlList;
+          console.log(`[Training] Using URL list: ${urls.length} URLs (sitemap detection skipped)`);
+          detectionMethod = `URLリスト（${urls.length}件）`;
+        } else if (sitemapUrl) {
+          // サイトマップURLが手動指定されている場合
+          urls = await getUrlsFromSitemap(sitemapUrl);
+          detectionMethod = '手動指定（サイトマップ）';
+        } else {
+          // URLリストもサイトマップURLもない場合のみ、自動検出を試行
+          const result = await getUrlsFromBaseUrl(baseUrl);
+          urls = result.urls;
+          detectedSitemapUrl = result.detectedSitemapUrl;
+          detectionMethod = result.detectionMethod;
         }
 
-        // ジョブのtotal_pagesを更新
+        // ジョブのtotal_pagesとmetadataを更新
+        console.log(`[Training] Detection result:`, {
+          detectionMethod,
+          detectedSitemapUrl,
+          urlCount: urls.length,
+        });
+        
         await supabaseClient
           .from('training_jobs')
-          .update({ total_pages: urls.length })
+          .update({ 
+            total_pages: urls.length,
+            metadata: {
+              detected_sitemap_url: detectedSitemapUrl || sitemapUrl || null,
+              detection_method: detectionMethod || '不明',
+              url_count: urls.length,
+              urls: urls, // 実際に学習されたURLのリストを保存
+            },
+          })
           .eq('id', jobId);
 
         // データ抽出
