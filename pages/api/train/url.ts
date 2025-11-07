@@ -188,9 +188,14 @@ async function getUrlsFromBaseUrl(baseUrl: string): Promise<{
 }
 
 // URLリストからデータを抽出
-async function extractDataFromUrls(urls: string[]): Promise<Document[]> {
+async function extractDataFromUrls(
+  urls: string[],
+  onProgress?: (processed: number, total: number) => Promise<void> | void,
+): Promise<Document[]> {
   console.log('extracting data from urls...');
   const documents: Document[] = [];
+  const total = urls.length;
+  let processed = 0;
   for (const url of urls) {
     try {
       const loader = new CustomWebLoader(url);
@@ -198,6 +203,10 @@ async function extractDataFromUrls(urls: string[]): Promise<Document[]> {
       documents.push(...docs);
     } catch (error) {
       console.error(`Error while extracting data from ${url}:`, error);
+    }
+    processed += 1;
+    if (onProgress) {
+      await onProgress(processed, total);
     }
   }
   console.log(`data extracted from ${documents.length} documents`);
@@ -451,7 +460,12 @@ export default async function handler(
           .eq('id', jobId);
 
         // データ抽出
-        const rawDocs = await extractDataFromUrls(urls);
+        const rawDocs = await extractDataFromUrls(urls, async (processed, total) => {
+          await supabaseClient
+            .from('training_jobs')
+            .update({ processed_pages: processed })
+            .eq('id', jobId);
+        });
         
         // チャンク分割
         const docs = await splitDocsIntoChunks(rawDocs);
@@ -484,7 +498,7 @@ export default async function handler(
           .update({
             status: 'completed',
             finished_at: new Date().toISOString(),
-            processed_pages: docs.length,
+            processed_pages: urls.length,
           })
           .eq('id', jobId);
 

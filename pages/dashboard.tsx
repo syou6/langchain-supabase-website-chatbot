@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { createSupabaseClient } from '@/utils/supabase-auth';
 import Onboarding from '@/components/Onboarding';
 
+const MAX_TRAINING_PAGES = 20;
+
 interface Site {
   id: string;
   name: string;
@@ -54,6 +56,7 @@ export default function Dashboard() {
   const [trainingSites, setTrainingSites] = useState<Set<string>>(new Set());
   const [trainingJobs, setTrainingJobs] = useState<Map<string, TrainingJob>>(new Map());
   const trainingJobsIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const trainingJobsChannelRef = useRef<any>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const supabase = createSupabaseClient();
   const channelRef = useRef<any>(null);
@@ -288,7 +291,7 @@ export default function Dashboard() {
 
     const interval = setInterval(() => {
       loadTrainingJobs(trainingSites);
-    }, 5000);
+    }, 2000);
     trainingJobsIntervalRef.current = interval;
 
     // 初期ロード
@@ -299,7 +302,57 @@ export default function Dashboard() {
         clearInterval(interval);
       }
     };
-  }, [Array.from(trainingSites).sort().join(',')]);
+  }, [trainingSites]);
+
+  const trainingSitesKey = Array.from(trainingSites).sort().join(',');
+
+  useEffect(() => {
+    const setupTrainingJobsRealtime = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (trainingJobsChannelRef.current) {
+        supabase.removeChannel(trainingJobsChannelRef.current);
+        trainingJobsChannelRef.current = null;
+      }
+
+      if (!session || trainingSites.size === 0) {
+        return;
+      }
+
+      trainingJobsChannelRef.current = supabase
+        .channel(`training-jobs-changes-${session.user.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'training_jobs',
+          },
+          (payload) => {
+            const job = payload.new as TrainingJob | null;
+            if (job && trainingSites.has(job.site_id)) {
+              setTrainingJobs((prev) => {
+                const next = new Map(prev);
+                next.set(job.site_id, job);
+                return next;
+              });
+            }
+          },
+        )
+        .subscribe();
+    };
+
+    setupTrainingJobsRealtime();
+
+    return () => {
+      if (trainingJobsChannelRef.current) {
+        supabase.removeChannel(trainingJobsChannelRef.current);
+        trainingJobsChannelRef.current = null;
+      }
+    };
+  }, [trainingSitesKey, supabase]);
 
   // 新規サイト作成
   const handleCreateSite = async (e: React.FormEvent) => {
@@ -370,6 +423,7 @@ export default function Dashboard() {
         }),
       });
       if (!response.ok) throw new Error('Failed to start training');
+      const trainingResponse = await response.json();
       
       // ステータスを更新
       setSites((prev) =>
@@ -378,6 +432,30 @@ export default function Dashboard() {
         )
       );
       setTrainingSites((prev) => new Set(prev).add(siteId));
+
+      if (trainingResponse?.job_id) {
+        setTrainingJobs((prev) => {
+          const next = new Map(prev);
+          next.set(siteId, {
+            id: trainingResponse.job_id,
+            site_id: siteId,
+            status: 'pending',
+            started_at: new Date().toISOString(),
+            finished_at: null,
+            total_pages: 0,
+            processed_pages: 0,
+            error_message: null,
+            metadata: {
+              page_limit: {
+                max_pages: trainingResponse.page_limit_max || MAX_TRAINING_PAGES,
+                truncated: false,
+              },
+            },
+            created_at: new Date().toISOString(),
+          });
+          return next;
+        });
+      }
       
       // 5秒後に再取得
       setTimeout(() => fetchSites(), 5000);
@@ -530,6 +608,40 @@ export default function Dashboard() {
                     </div>
                   )}
                 </div>
+
+                {site.status === 'training' && (
+                  <div className="mb-4 text-xs md:text-sm text-gray-600">
+                    {(() => {
+                      const job = trainingJobs.get(site.id);
+                      const processedPages = job?.processed_pages || 0;
+                      const inferredTotal = job?.total_pages || job?.metadata?.url_count || MAX_TRAINING_PAGES;
+                      const totalPages = inferredTotal || MAX_TRAINING_PAGES;
+                      const progressPercent = totalPages
+                        ? Math.min(100, (processedPages / totalPages) * 100)
+                        : 0;
+                      const label = job
+                        ? `${processedPages} / ${totalPages}`
+                        : 'URL解析中...';
+                      return (
+                        <div>
+                          <div className="flex justify-between text-xs text-gray-600 mb-1">
+                            <span className="font-medium">学習進捗</span>
+                            <span>{label}</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div
+                              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                              style={{ width: `${progressPercent}%` }}
+                            />
+                          </div>
+                          {!job && (
+                            <p className="mt-1 text-[11px] text-gray-500">URLリストを解析しています...</p>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
 
                 <div className="flex flex-col sm:flex-row gap-2 mt-4">
                   {site.status === 'ready' && (
