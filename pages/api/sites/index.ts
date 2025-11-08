@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { supabaseClient } from '@/utils/supabase-client';
 import { getAuthUser, getSupabaseAdminClient } from '@/utils/supabase-auth';
+import { sendSiteRegistrationEmail } from '@/utils/send-email';
 
 const ADMIN_EMAILS = (process.env.NEXT_PUBLIC_ADMIN_EMAILS || process.env.ADMIN_EMAILS || '')
   .split(',')
@@ -103,6 +104,16 @@ export default async function handler(
 
       if (error) {
         throw error;
+      }
+
+      if (authUser.email) {
+        sendSiteRegistrationEmail({
+          to: authUser.email,
+          siteName: name,
+          baseUrl: baseUrl,
+        }).catch((mailError) => {
+          console.error('[Email] Failed to send registration mail:', mailError);
+        });
       }
 
       return res.status(201).json(data);
