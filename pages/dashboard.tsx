@@ -4,6 +4,7 @@ import Layout from '@/components/layout';
 import Link from 'next/link';
 import { createSupabaseClient } from '@/utils/supabase-auth';
 import Onboarding from '@/components/Onboarding';
+import { InternalPlan } from '@/lib/planConfig';
 
 const MAX_TRAINING_PAGES = 20;
 const ADMIN_EMAILS = (process.env.NEXT_PUBLIC_ADMIN_EMAILS ?? '')
@@ -68,6 +69,8 @@ export default function Dashboard() {
   const [urlInputs, setUrlInputs] = useState(['']);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(ADMIN_EMAILS.length === 0);
+  const [userPlan, setUserPlan] = useState<InternalPlan | null>(null);
+  const [planLoading, setPlanLoading] = useState(true);
   const [trainingSites, setTrainingSites] = useState<Set<string>>(new Set());
   const [trainingJobs, setTrainingJobs] = useState<Map<string, TrainingJob>>(new Map());
   const trainingJobsIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -126,6 +129,74 @@ export default function Dashboard() {
     };
 
     checkOnboarding();
+  }, [authLoading, supabase]);
+
+  // ユーザープラン取得（サブスク誘導表示用）
+  useEffect(() => {
+    if (authLoading) return;
+
+    let isMounted = true;
+
+    const ensureUserPlan = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        if (isMounted) {
+          setUserPlan(null);
+          setPlanLoading(false);
+        }
+        return;
+      }
+
+      try {
+        setPlanLoading(true);
+        const { data, error } = await supabase
+          .from('users')
+          .select('plan')
+          .eq('id', session.user.id)
+          .maybeSingle();
+
+        if (error && error.code !== 'PGRST116') {
+          throw error;
+        }
+
+        if (data?.plan) {
+          if (isMounted) {
+            setUserPlan(data.plan as InternalPlan);
+          }
+          return;
+        }
+
+        const { data: newUser } = await supabase
+          .from('users')
+          .insert({
+            id: session.user.id,
+            plan: 'pending',
+            chat_quota: 0,
+            embedding_quota: 0,
+          })
+          .select('plan')
+          .single();
+
+        if (isMounted) {
+          setUserPlan((newUser?.plan as InternalPlan) ?? 'pending');
+        }
+      } catch (error) {
+        console.error('Error fetching user plan:', error);
+      } finally {
+        if (isMounted) {
+          setPlanLoading(false);
+        }
+      }
+    };
+
+    ensureUserPlan();
+
+    return () => {
+      isMounted = false;
+    };
   }, [authLoading, supabase]);
 
   // サイト一覧を取得
@@ -707,6 +778,25 @@ export default function Dashboard() {
               </Link>
             </div>
           )}
+
+        {sites.length > 0 && !planLoading && (!userPlan || userPlan === 'pending') && (
+          <div className="mb-6 rounded-3xl border border-emerald-400/40 bg-emerald-400/10 p-4 text-sm text-emerald-50 shadow-[0_25px_80px_rgba(16,185,129,0.15)] sm:p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-base font-semibold text-white">サイト登録ありがとうございます！</p>
+                <p className="mt-1 text-xs text-emerald-100 sm:text-sm">
+                  学習着手はサブスク契約後に順次行います。アップグレードして優先的にセットアップを進めましょう。
+                </p>
+              </div>
+              <Link
+                href="/dashboard/plans"
+                className="inline-flex items-center justify-center rounded-full bg-white px-5 py-2 text-sm font-semibold text-emerald-700 shadow-[0_20px_45px_rgba(255,255,255,0.25)] transition hover:-translate-y-0.5"
+              >
+                プランを確認する
+              </Link>
+            </div>
+          </div>
+        )}
 
         {sites.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-white/20 bg-white/5 px-6 py-12 text-center text-slate-300">

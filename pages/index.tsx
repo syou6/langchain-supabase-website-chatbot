@@ -545,7 +545,6 @@ export default function Home() {
               </div>
               <p>© {new Date().getFullYear()} WEBGPT. All rights reserved.</p>
             </div>
-            <p>東京都新宿区新宿1-36-2 新宿第七葉山ビル3F / 電話 +81 852 52 7323 / heartssh@gmail.com</p>
           </div>
         </div>
         </footer>
