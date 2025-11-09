@@ -51,7 +51,7 @@ export default function Layout({ children }: LayoutProps) {
         </main>
       </div>
       <Script
-        src="https://www.webgpt.tokyo/api/embed/script?site_id=fe8aba45-7a35-41a5-9e57-9fbb88224c03&v=20250209"
+        src="/api/embed/script?site_id=fe8aba45-7a35-41a5-9e57-9fbb88224c03&v=20250209"
         strategy="afterInteractive"
       />
     </div>
