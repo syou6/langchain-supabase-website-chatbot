@@ -81,7 +81,7 @@ export default function Login() {
 
         <div className="relative z-10 w-full max-w-lg rounded-[32px] border border-white/10 bg-white/5 p-6 text-slate-100 shadow-[0_45px_120px_rgba(1,8,4,0.65)] backdrop-blur-2xl sm:p-8">
           <div className="text-center">
-            <p className="text-xs uppercase tracking-[0.4em] text-emerald-200/80">SiteGPT Access</p>
+            <p className="text-xs uppercase tracking-[0.4em] text-emerald-200/80">WEBGPT Access</p>
             <h1 className="mt-2 text-2xl font-semibold text-white">
               {isSignUp ? '新規登録' : 'ログイン'}
             </h1>

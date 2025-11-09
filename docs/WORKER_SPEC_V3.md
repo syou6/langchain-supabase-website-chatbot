@@ -1,4 +1,4 @@
-# 🔧 SiteGPT.jp v3 ワーカー仕様書
+# 🔧 WEBGPT.jp v3 ワーカー仕様書
 
 （Redis + BullMQ によるジョブキューシステム）
 
@@ -506,4 +506,3 @@ for (let i = 0; i < urls.length; i += BATCH_SIZE) {
 これで **v3ワーカー仕様書完了**。
 
 次は実装に進むか、追加の仕様が必要なら教えてね！
-

@@ -685,7 +685,7 @@ export default function Dashboard() {
           {!isAdmin && (
             <div className="mb-8 rounded-3xl border border-dashed border-white/15 bg-white/5 px-5 py-4 text-sm text-slate-200">
               <p>
-                現在、チャットボットの学習と埋め込み設定は SiteGPT チームが代行します。必要な URL を登録しておくだけで大丈夫です。
+                現在、チャットボットの学習と埋め込み設定は WEBGPT チームが代行します。必要な URL を登録しておくだけで大丈夫です。
               </p>
               <p className="mt-2 text-xs text-slate-400">
                 {userEmail ? `ログイン中: ${userEmail}` : 'ログインユーザー情報を取得しています…'} / 学習は順次対応します。

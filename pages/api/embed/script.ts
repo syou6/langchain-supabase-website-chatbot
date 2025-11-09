@@ -71,7 +71,7 @@ function generateEmbedScript(siteId: string, apiBaseUrl: string): string {
   return `(function() {
   'use strict';
   
-  if (window.SiteGPTEmbed && window.SiteGPTEmbed.loaded) {
+  if (window.WebGPTEmbed && window.WebGPTEmbed.loaded) {
     return;
   }
 
@@ -107,23 +107,23 @@ function generateEmbedScript(siteId: string, apiBaseUrl: string): string {
   document.head.appendChild(styleEl);
 
   const widgetHTML = [
-    '<div class="sgpt-widget" id="sitegpt-widget">',
-    '  <div class="sgpt-chat-panel" id="sitegpt-chat-container">',
+    '<div class="sgpt-widget" id="webgpt-widget">',
+    '  <div class="sgpt-chat-panel" id="webgpt-chat-container">',
     '    <div class="sgpt-chat-header">',
     '      <div>',
-    '        <p class="sgpt-chip">SiteGPT</p>',
+    '        <p class="sgpt-chip">WEBGPT</p>',
     '        <p class="sgpt-title">Neon Assistant</p>',
     '      </div>',
-    '      <button class="sgpt-close-btn" id="sitegpt-close-btn">×</button>',
+    '      <button class="sgpt-close-btn" id="webgpt-close-btn">×</button>',
     '    </div>',
-    '    <div class="sgpt-messages" id="sitegpt-messages"></div>',
+    '    <div class="sgpt-messages" id="webgpt-messages"></div>',
     '    <div class="sgpt-input-bar">',
-    '      <input type="text" id="sitegpt-input" class="sgpt-input" placeholder="質問を入力..." />',
-    '      <button id="sitegpt-send-btn" class="sgpt-send-btn">送信</button>',
+    '      <input type="text" id="webgpt-input" class="sgpt-input" placeholder="質問を入力..." />',
+    '      <button id="webgpt-send-btn" class="sgpt-send-btn">送信</button>',
     '    </div>',
-    '    <div class="sgpt-footer">Powered by SiteGPT</div>',
+    '    <div class="sgpt-footer">Powered by WEBGPT</div>',
     '  </div>',
-    '  <button class="sgpt-fab" id="sitegpt-toggle-btn">💬</button>',
+    '  <button class="sgpt-fab" id="webgpt-toggle-btn">💬</button>',
     '</div>'
   ].join('');
 
@@ -131,13 +131,13 @@ function generateEmbedScript(siteId: string, apiBaseUrl: string): string {
   wrapper.innerHTML = widgetHTML;
   document.body.appendChild(wrapper);
 
-  const widget = document.getElementById('sitegpt-widget');
-  const chatContainer = document.getElementById('sitegpt-chat-container');
-  const toggleBtn = document.getElementById('sitegpt-toggle-btn');
-  const closeBtn = document.getElementById('sitegpt-close-btn');
-  const messagesDiv = document.getElementById('sitegpt-messages');
-  const inputField = document.getElementById('sitegpt-input') as HTMLInputElement | null;
-  const sendBtn = document.getElementById('sitegpt-send-btn');
+  const widget = document.getElementById('webgpt-widget');
+  const chatContainer = document.getElementById('webgpt-chat-container');
+  const toggleBtn = document.getElementById('webgpt-toggle-btn');
+  const closeBtn = document.getElementById('webgpt-close-btn');
+  const messagesDiv = document.getElementById('webgpt-messages');
+  const inputField = document.getElementById('webgpt-input') as HTMLInputElement | null;
+  const sendBtn = document.getElementById('webgpt-send-btn');
 
   function toggleChat(open) {
     if (!widget || !chatContainer) return;
@@ -163,7 +163,7 @@ function generateEmbedScript(siteId: string, apiBaseUrl: string): string {
   function showLoading() {
     if (!messagesDiv) return null;
     const loading = document.createElement('div');
-    loading.id = 'sitegpt-loading';
+    loading.id = 'webgpt-loading';
     loading.className = 'sgpt-message bot sgpt-loading';
     loading.textContent = 'Neon assistant is thinking...';
     messagesDiv.appendChild(loading);
@@ -212,7 +212,7 @@ function generateEmbedScript(siteId: string, apiBaseUrl: string): string {
           const parsed = JSON.parse(payload);
           if (parsed.data) answer += parsed.data;
         } catch (err) {
-          console.warn('SiteGPT embed parse error', err);
+          console.warn('WEBGPT embed parse error', err);
         }
       }
 
@@ -237,7 +237,7 @@ function generateEmbedScript(siteId: string, apiBaseUrl: string): string {
     }
   });
 
-  window.SiteGPTEmbed = {
+  window.WebGPTEmbed = {
     loaded: true,
     siteId: siteId,
   };

@@ -30,13 +30,13 @@ async function testEmbedScript(siteId: string) {
     console.log(`   ✅ スクリプト取得成功 (${script.length} bytes)`);
     
     // スクリプトの内容を確認
-    if (script.includes('SiteGPTEmbed')) {
-      console.log('   ✅ スクリプトにSiteGPTEmbedが含まれています');
+    if (script.includes('WebGPTEmbed')) {
+      console.log('   ✅ スクリプトにWEBGPTEmbedが含まれています');
     } else {
-      console.log('   ⚠️  スクリプトにSiteGPTEmbedが含まれていません（無効なサイトの可能性）');
+      console.log('   ⚠️  スクリプトにWEBGPTEmbedが含まれていません（無効なサイトの可能性）');
     }
 
-    if (script.includes('sitegpt-widget')) {
+    if (script.includes('webgpt-widget')) {
       console.log('   ✅ ウィジェットHTMLが含まれています');
     }
 

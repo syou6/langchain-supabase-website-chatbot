@@ -3,82 +3,41 @@ import { useRouter } from 'next/router';
 import Layout from '@/components/layout';
 import Link from 'next/link';
 import { createSupabaseClient } from '@/utils/supabase-auth';
+import {
+  PLAN_CONFIG,
+  planOrder,
+  PlanTier,
+  InternalPlan,
+  getPlanLabel,
+} from '@/lib/planConfig';
 
 interface User {
   id: string;
-  plan: 'starter' | 'pro' | 'enterprise';
+  plan: InternalPlan;
   chat_quota: number;
   embedding_quota: number;
+  stripe_subscription_id?: string | null;
+  subscription_status?: string | null;
+  cancel_at_period_end?: boolean | null;
 }
 
-interface Plan {
-  id: 'starter' | 'pro' | 'enterprise';
-  name: string;
-  description: string;
-  price: string;
-  chat_quota: number;
-  embedding_quota: number;
-  features: string[];
-  popular?: boolean;
-}
+const AVAILABLE_PLAN_TIERS: PlanTier[] = ['solo'];
 
-const plans: Plan[] = [
-  {
-    id: 'starter',
-    name: 'スターター',
-    description: '個人・小規模サイト向け',
-    price: '無料',
-    chat_quota: 1000,
-    embedding_quota: 100000,
-    features: [
-      '月1,000回のチャット',
-      '月100,000トークンの埋め込み',
-      '最大3サイト',
-      '基本的なサポート',
-    ],
-  },
-  {
-    id: 'pro',
-    name: 'プロ',
-    description: 'ビジネス・中規模サイト向け',
-    price: '¥9,800/月',
-    chat_quota: 10000,
-    embedding_quota: 1000000,
-    features: [
-      '月10,000回のチャット',
-      '月1,000,000トークンの埋め込み',
-      '無制限のサイト数',
-      '優先サポート',
-      'カスタムブランディング',
-      'APIアクセス',
-    ],
-    popular: true,
-  },
-  {
-    id: 'enterprise',
-    name: 'エンタープライズ',
-    description: '大規模・企業向け',
-    price: 'カスタム',
-    chat_quota: -1, // 無制限
-    embedding_quota: -1, // 無制限
-    features: [
-      '無制限のチャット',
-      '無制限の埋め込み',
-      '無制限のサイト数',
-      '専任サポート',
-      'カスタム統合',
-      'SLA保証',
-      'オンプレミス対応可能',
-    ],
-  },
-];
+const planCards = planOrder.map((tier) => ({
+  tier,
+  ...PLAN_CONFIG[tier],
+  comingSoon: !AVAILABLE_PLAN_TIERS.includes(tier),
+}));
 
 export default function PlansPage() {
   const router = useRouter();
   const [authLoading, setAuthLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
-  const [upgrading, setUpgrading] = useState<string | null>(null);
+  const [upgrading, setUpgrading] = useState<PlanTier | null>(null);
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const [resumeLoading, setResumeLoading] = useState(false);
+  const [stripeError, setStripeError] = useState<string | null>(null);
   const supabase = createSupabaseClient();
 
   // 認証チェック
@@ -148,74 +107,158 @@ export default function PlansPage() {
     fetchUser();
   }, [authLoading, supabase]);
 
-  // プラン変更（実際の実装では決済処理が必要）
-  const handleUpgrade = async (planId: 'starter' | 'pro' | 'enterprise') => {
-    if (!user || upgrading) return;
-
-    // 現在のプランと同じ場合は何もしない
-    if (user.plan === planId) {
+  const handleCheckout = async (tier: PlanTier) => {
+    if (!user || upgrading || !AVAILABLE_PLAN_TIERS.includes(tier)) {
       return;
     }
 
-    // ダウングレードの場合は確認
-    const currentPlanIndex = plans.findIndex((p) => p.id === user.plan);
-    const newPlanIndex = plans.findIndex((p) => p.id === planId);
-    if (newPlanIndex < currentPlanIndex && planId !== 'starter') {
-      if (
-        !confirm(
-          'より低いプランに変更しますか？\n現在のプランの機能が制限される可能性があります。'
-        )
-      ) {
-        return;
-      }
+    const targetPlan = PLAN_CONFIG[tier];
+    if (user.plan === targetPlan.internalPlan) {
+      return;
     }
 
     try {
-      setUpgrading(planId);
+      setStripeError(null);
+      setUpgrading(tier);
 
-      // プランに応じたクォータを設定
-      const selectedPlan = plans.find((p) => p.id === planId);
-      if (!selectedPlan) return;
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-      const { error } = await supabase
-        .from('users')
-        .update({
-          plan: planId,
-          chat_quota: selectedPlan.chat_quota,
-          embedding_quota: selectedPlan.embedding_quota,
-        })
-        .eq('id', user.id);
-
-      if (error) {
-        throw error;
+      if (!session?.access_token) {
+        throw new Error('認証情報の取得に失敗しました。再ログインしてください。');
       }
 
-      // ユーザー情報を更新
-      setUser({
-        ...user,
-        plan: planId,
-        chat_quota: selectedPlan.chat_quota,
-        embedding_quota: selectedPlan.embedding_quota,
+      const response = await fetch('/api/stripe/create-checkout-session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ plan: tier }),
       });
 
-      // エンタープライズプランの場合は別途連絡が必要
-      if (planId === 'enterprise') {
-        alert(
-          'エンタープライズプランへの変更リクエストを受け付けました。\n担当者から連絡いたします。'
-        );
-      } else if (planId === 'pro') {
-        // 実際の実装では決済処理が必要
-        alert(
-          'プロプランへの変更は、決済処理が必要です。\n現在はデモモードのため、プランのみ変更されました。'
-        );
-      } else {
-        alert('プランを変更しました');
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(payload?.message || '決済セッションの作成に失敗しました。');
       }
-    } catch (error) {
-      console.error('Error upgrading plan:', error);
-      alert('プランの変更に失敗しました');
+
+      if (payload?.url) {
+        window.location.href = payload.url as string;
+        return;
+      }
+
+      throw new Error('StripeチェックアウトURLが取得できませんでした。');
+    } catch (error: any) {
+      console.error('Stripe checkout error:', error);
+      setStripeError(error?.message ?? '決済ページへの遷移に失敗しました。');
     } finally {
       setUpgrading(null);
+    }
+  };
+
+  const handleCancelSubscription = async () => {
+    if (!user || cancelLoading) {
+      return;
+    }
+
+    if (!confirm('次回の更新タイミングで解約します。よろしいですか？')) {
+      return;
+    }
+
+    try {
+      setStripeError(null);
+      setCancelLoading(true);
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        throw new Error('認証情報の取得に失敗しました。再ログインしてください。');
+      }
+
+      const response = await fetch('/api/stripe/cancel-subscription', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (response.status === 401) {
+        throw new Error('認証情報の有効期限が切れました。ログインし直してください。');
+      }
+
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(payload?.message || '解約処理に失敗しました。');
+      }
+
+      setUser({
+        ...user,
+        subscription_status: payload?.status ?? user.subscription_status,
+        cancel_at_period_end:
+          typeof payload?.cancel_at_period_end === 'boolean'
+            ? payload.cancel_at_period_end
+            : true,
+      });
+    } catch (error: any) {
+      console.error('Cancel subscription error:', error);
+      setStripeError(error?.message ?? '解約手続きに失敗しました。');
+    } finally {
+      setCancelLoading(false);
+    }
+  };
+
+  const handleResumeSubscription = async () => {
+    if (!user || resumeLoading) {
+      return;
+    }
+
+    try {
+      setStripeError(null);
+      setResumeLoading(true);
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        throw new Error('認証情報の取得に失敗しました。再ログインしてください。');
+      }
+
+      const response = await fetch('/api/stripe/resume-subscription', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (response.status === 401) {
+        throw new Error('認証情報の有効期限が切れました。ログインし直してください。');
+      }
+
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(payload?.message || '解約予約の取り消しに失敗しました。');
+      }
+
+      setUser({
+        ...user,
+        subscription_status: payload?.status ?? user.subscription_status,
+        cancel_at_period_end:
+          typeof payload?.cancel_at_period_end === 'boolean'
+            ? payload.cancel_at_period_end
+            : false,
+      });
+    } catch (error: any) {
+      console.error('Resume subscription error:', error);
+      setStripeError(error?.message ?? '解約予約の取り消しに失敗しました。');
+    } finally {
+      setResumeLoading(false);
     }
   };
 
@@ -231,6 +274,8 @@ export default function PlansPage() {
     );
   }
 
+  const currentPlanLabel = user ? getPlanLabel(user.plan) : null;
+
   return (
     <Layout>
       <div className="relative mx-auto max-w-6xl px-4 py-6 text-slate-100 sm:py-8">
@@ -240,7 +285,6 @@ export default function PlansPage() {
         </div>
 
         <div className="relative space-y-8">
-          {/* ヘッダー */}
           <div className="rounded-[32px] border border-white/10 bg-white/5 p-6 shadow-[0_35px_120px_rgba(1,6,3,0.55)] backdrop-blur-2xl">
             <Link
               href="/dashboard"
@@ -250,25 +294,78 @@ export default function PlansPage() {
             </Link>
             <h1 className="mt-2 text-3xl font-semibold text-white">プラン比較</h1>
             <p className="text-sm text-slate-300">
-              あなたのニーズに合ったプランを選択してください
+              スタータープランからStripe決済が利用可能です。プロ / ビジネスは近日公開予定。
             </p>
           </div>
 
-          {/* 現在のプラン表示 */}
-          {user && (
-            <div className="rounded-[28px] border border-white/10 bg-gradient-to-r from-emerald-500/10 via-green-400/5 to-cyan-300/10 p-4 text-sm text-emerald-50">
-              現在のプラン: <strong>{plans.find((p) => p.id === user.plan)?.name || user.plan}</strong>
+          {stripeError && (
+            <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+              {stripeError}
             </div>
           )}
 
-          {/* プラン一覧 */}
+          {user && (
+            <div className="rounded-[28px] border border-white/10 bg-gradient-to-r from-emerald-500/10 via-green-400/5 to-cyan-300/10 p-4 text-sm text-emerald-50">
+              現在のプラン: <strong>{currentPlanLabel}</strong>
+              {user.stripe_subscription_id && (
+                <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="text-xs text-emerald-100">
+                    {user.cancel_at_period_end
+                      ? '解約予約済み：現在の請求期間終了後に自動停止します'
+                      : `サブスクリプション状態: ${user.subscription_status || 'active'}`}
+                  </div>
+                  <div className="flex gap-2">
+                    {!user.cancel_at_period_end ? (
+                      <button
+                        onClick={handleCancelSubscription}
+                        disabled={cancelLoading}
+                        className="inline-flex items-center justify-center rounded-full border border-white/20 px-4 py-2 text-xs font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {cancelLoading ? '処理中...' : '次回更新で解約'}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleResumeSubscription}
+                        disabled={resumeLoading}
+                        className="inline-flex items-center justify-center rounded-full border border-white/20 px-4 py-2 text-xs font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {resumeLoading ? '処理中...' : '解約予約を取り消す'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="rounded-[28px] border border-dashed border-white/15 bg-white/5 px-4 py-3 text-xs text-slate-300">
+            プロ / ビジネス（旧プロ / エンタープライズ）プランは現在最終調整中です。公開までしばらくお待ちください。
+          </div>
+
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-            {plans.map((plan) => {
-              const isCurrentPlan = user?.plan === plan.id;
-              const isUpgrading = upgrading === plan.id;
+            {planCards.map((plan) => {
+              const isCurrentPlan = user?.plan === plan.internalPlan;
+              const isComingSoon = plan.comingSoon;
+              const isProcessing = upgrading === plan.tier;
+              const featureItems = [
+                plan.siteLimitText,
+                `月${plan.chatQuota.toLocaleString()}チャット`,
+                `月${plan.embeddingQuota.toLocaleString()}トークン`,
+                ...plan.features,
+              ].filter(Boolean);
+
+              const buttonDisabled = isCurrentPlan || isComingSoon || isProcessing;
+              const buttonLabel = isCurrentPlan
+                ? '現在のプラン'
+                : isComingSoon
+                ? '近日公開'
+                : isProcessing
+                ? 'リダイレクト中...'
+                : '今すぐ申し込む';
+
               return (
                 <div
-                  key={plan.id}
+                  key={plan.tier}
                   className={`relative overflow-hidden rounded-[32px] border border-white/10 bg-white/5 p-6 shadow-[0_35px_120px_rgba(1,3,6,0.55)] backdrop-blur-2xl ${
                     plan.popular ? 'ring-1 ring-emerald-400/40' : ''
                   }`}
@@ -279,41 +376,36 @@ export default function PlansPage() {
                     )}
                   </div>
                   <div className="relative">
-                    {plan.popular && (
-                      <span className="inline-flex items-center rounded-full bg-emerald-400/20 px-3 py-1 text-xs font-semibold text-emerald-100">
-                        人気
-                      </span>
-                    )}
-                    {isCurrentPlan && (
-                      <span className="ml-2 inline-flex items-center rounded-full border border-emerald-400/40 px-3 py-1 text-xs font-semibold text-emerald-100">
-                        現在のプラン
-                      </span>
-                    )}
+                    <div className="flex flex-wrap gap-2">
+                      {plan.popular && (
+                        <span className="inline-flex items-center rounded-full bg-emerald-400/20 px-3 py-1 text-xs font-semibold text-emerald-100">
+                          人気
+                        </span>
+                      )}
+                      {isComingSoon && (
+                        <span className="inline-flex items-center rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-slate-200">
+                          近日公開
+                        </span>
+                      )}
+                      {isCurrentPlan && (
+                        <span className="inline-flex items-center rounded-full border border-emerald-400/40 px-3 py-1 text-xs font-semibold text-emerald-100">
+                          現在のプラン
+                        </span>
+                      )}
+                    </div>
 
                     <div className="mt-4">
-                      <h2 className="text-2xl font-semibold text-white">{plan.name}</h2>
+                      <h2 className="text-2xl font-semibold text-white">{plan.label}</h2>
                       <p className="mt-1 text-sm text-slate-300">{plan.description}</p>
                     </div>
 
                     <div className="mt-6">
-                      <div className="text-3xl font-semibold text-white">{plan.price}</div>
-                      {plan.price !== '無料' && plan.price !== 'カスタム' && (
-                        <div className="text-xs uppercase tracking-[0.3em] text-slate-400">税込</div>
-                      )}
+                      <div className="text-3xl font-semibold text-white">{plan.priceLabel}</div>
+                      <div className="text-xs uppercase tracking-[0.3em] text-slate-400">税込</div>
                     </div>
 
                     <div className="mt-6 space-y-3">
-                      {[{
-                        label:
-                          plan.chat_quota === -1
-                            ? '無制限のチャット'
-                            : `月${plan.chat_quota.toLocaleString()}回のチャット`,
-                      }, {
-                        label:
-                          plan.embedding_quota === -1
-                            ? '無制限の埋め込み'
-                            : `月${plan.embedding_quota.toLocaleString()}トークンの埋め込み`,
-                      }, ...plan.features.map((label) => ({ label }))].map((item, index) => (
+                      {featureItems.map((label, index) => (
                         <div key={index} className="flex items-start text-sm text-slate-200">
                           <svg
                             className="mr-2 h-5 w-5 flex-shrink-0 text-emerald-300"
@@ -323,41 +415,41 @@ export default function PlansPage() {
                           >
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                           </svg>
-                          <span>{item.label}</span>
+                          <span>{label}</span>
                         </div>
                       ))}
                     </div>
 
                     <button
-                      onClick={() => handleUpgrade(plan.id)}
-                      disabled={isCurrentPlan || isUpgrading}
+                      onClick={() => handleCheckout(plan.tier)}
+                      disabled={buttonDisabled}
                       className={`mt-6 w-full rounded-full px-4 py-2.5 text-sm font-semibold transition ${
-                        isCurrentPlan
+                        buttonDisabled
                           ? 'cursor-not-allowed border border-white/10 bg-white/5 text-slate-400'
                           : 'bg-gradient-to-r from-emerald-400 via-green-300 to-cyan-300 text-slate-900 shadow-[0_20px_45px_rgba(16,185,129,0.35)] hover:-translate-y-0.5'
                       }`}
                     >
-                      {isCurrentPlan
-                        ? '現在のプラン'
-                        : isUpgrading
-                        ? '処理中...'
-                        : plan.id === 'enterprise'
-                        ? 'お問い合わせ'
-                        : 'このプランに変更'}
+                      {buttonLabel}
                     </button>
+                    <p className="mt-2 text-xs text-slate-400">
+                      {isCurrentPlan
+                        ? 'ご利用中のプランです'
+                        : isComingSoon
+                        ? '現在準備中のため少々お待ちください'
+                        : 'Stripeの決済画面に遷移します'}
+                    </p>
                   </div>
                 </div>
               );
             })}
           </div>
 
-          {/* 注意事項 */}
           <div className="rounded-[28px] border border-amber-300/30 bg-amber-500/10 p-4 text-sm text-amber-50">
             <h3 className="mb-2 font-semibold">⚠️ 注意事項</h3>
             <ul className="list-disc space-y-1 pl-5 text-amber-100">
-              <li>プラン変更は即座に反映されますが、決済処理が必要な場合は別途お手続きが必要です。</li>
-              <li>エンタープライズプランへの変更は、担当者からの連絡が必要です。</li>
-              <li>プランをダウングレードした場合、現在の使用量が新しいクォータを超えている場合は制限が適用されます。</li>
+              <li>スタータープランのお申し込みはStripe決済完了後に自動で反映されます。</li>
+              <li>近日公開プランを希望される場合はサポートまでご連絡ください。</li>
+              <li>プラン変更後のチャット/トークンクォータは次の課金期間から適用されます。</li>
             </ul>
           </div>
         </div>

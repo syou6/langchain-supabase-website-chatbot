@@ -1,4 +1,4 @@
-# 🧱 SiteGPT.jp SaaS 化設計ドキュメント v3
+# 🧱 WEBGPT.jp SaaS 化設計ドキュメント v3
 
 （フェーズ B+: 拡張運用版）
 

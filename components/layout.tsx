@@ -5,9 +5,9 @@ interface LayoutProps {
 }
 
 const navLinks = [
-  { label: 'Dashboard', href: '/dashboard' },
-  { label: 'Usage', href: '/dashboard/usage' },
-  { label: 'Plans', href: '/dashboard/plans' },
+  { label: 'ダッシュボード', href: '/dashboard' },
+  { label: '利用状況', href: '/dashboard/usage' },
+  { label: 'プラン', href: '/dashboard/plans' },
 ];
 
 export default function Layout({ children }: LayoutProps) {
@@ -22,8 +22,7 @@ export default function Layout({ children }: LayoutProps) {
       <div className="relative mx-auto flex min-h-screen max-w-6xl flex-col px-6 py-8 lg:px-10">
         <header className="flex flex-col gap-4 border-b border-white/5 pb-6 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.25em] text-emerald-300/70">SiteGPT</p>
-            <h1 className="text-2xl font-semibold text-white">Neon Operations Console</h1>
+            <h1 className="text-2xl font-semibold text-white">WEBGPT</h1>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <nav className="flex flex-1 items-center justify-center gap-1 rounded-full border border-white/10 bg-emerald-950/30 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.07),0_20px_60px_rgba(6,20,11,0.65)] backdrop-blur-md">
@@ -41,7 +40,7 @@ export default function Layout({ children }: LayoutProps) {
               href="/dashboard"
               className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-emerald-400 via-green-300 to-cyan-300 px-6 py-2.5 text-sm font-semibold text-slate-900 shadow-[0_25px_45px_rgba(16,185,129,0.35)] transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200"
             >
-              Launch Console
+              コンソールを開く
             </Link>
           </div>
         </header>

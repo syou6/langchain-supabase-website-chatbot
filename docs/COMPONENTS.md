@@ -1,6 +1,6 @@
 # Components
 
-Components are reusable building blocks that meet specific interaction needs. They combine to create intuitive user experiences for SiteGPT.jp.
+Components are reusable building blocks that meet specific interaction needs. They combine to create intuitive user experiences for WEBGPT.jp.
 
 ## Design principles
 
@@ -459,6 +459,6 @@ import { cn } from '@/utils/cn';
 
 ---
 
-© 2025 SiteGPT.jp
+© 2025 WEBGPT.jp
 
 For questions or contributions, please refer to the main project documentation.

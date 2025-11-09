@@ -1,6 +1,6 @@
 
 
-# 🧱 SiteGPT.jp SaaS 化設計ドキュメント v2
+# 🧱 WEBGPT.jp SaaS 化設計ドキュメント v2
 
 （フェーズ B：マルチサイト・マルチユーザー RAG 基盤）
 

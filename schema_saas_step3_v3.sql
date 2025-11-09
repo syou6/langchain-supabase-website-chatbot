@@ -1,5 +1,5 @@
 -- ============================================
--- SiteGPT.jp SaaS化 v3 マイグレーション
+-- WEBGPT.jp SaaS化 v3 マイグレーション
 -- v2 → v3 への拡張
 -- ============================================
 
@@ -270,9 +270,8 @@ COMMENT ON FUNCTION check_quota IS 'ユーザーのクォータをチェック�
 -- ============================================
 DO $$
 BEGIN
-  RAISE NOTICE '✅ SiteGPT.jp SaaS化 v3 マイグレーション完了';
+  RAISE NOTICE '✅ WEBGPT.jp SaaS化 v3 マイグレーション完了';
   RAISE NOTICE '   追加テーブル: users, model_policies, usage_logs';
   RAISE NOTICE '   拡張テーブル: sites, training_jobs, documents';
   RAISE NOTICE '   関数追加: get_monthly_usage, check_quota';
 END $$;
-

@@ -130,7 +130,7 @@ Vercelとは別のサービスでワーカーを常時起動します。
 2. **`fly.toml` を作成**:
 
 ```toml
-app = "sitegpt-worker"
+app = "webgpt-worker"
 primary_region = "nrt"
 
 [build]
@@ -310,4 +310,3 @@ Vercelダッシュボードの「Logs」タブで、Cron Jobsの実行ログを�
 - [Railway Documentation](https://docs.railway.app)
 - [Render Documentation](https://render.com/docs)
 - [Upstash QStash](https://docs.upstash.com/qstash)
-

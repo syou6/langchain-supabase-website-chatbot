@@ -1,5 +1,5 @@
 -- ============================================
--- SiteGPT.jp SaaS化 v3 マイグレーション確認
+-- WEBGPT.jp SaaS化 v3 マイグレーション確認
 -- ============================================
 
 -- 1. users テーブル確認
@@ -128,4 +128,3 @@ WHERE trigger_schema = 'public'
     OR event_object_table IN ('users', 'model_policies')
   )
 ORDER BY event_object_table, trigger_name;
-

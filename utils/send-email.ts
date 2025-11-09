@@ -1,5 +1,5 @@
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const DEFAULT_FROM = process.env.RESEND_FROM_EMAIL || 'SiteGPT <no-reply@sitegpt.jp>';
+const DEFAULT_FROM = process.env.RESEND_FROM_EMAIL || 'WEBGPT <no-reply@sitegpt.jp>';
 
 interface SendEmailParams {
   to: string | string[];
@@ -41,7 +41,7 @@ export async function sendSiteRegistrationEmail(options: {
   const { to, siteName, baseUrl } = options;
   await sendEmail({
     to,
-    subject: `SiteGPT: 「${siteName}」の登録を受け付けました`,
+    subject: `WEBGPT: 「${siteName}」の登録を受け付けました`,
     html: `
       <div style="font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; color: #0f172a;">
         <h2 style="margin-bottom: 8px;">サイト受付完了のお知らせ</h2>
@@ -50,7 +50,7 @@ export async function sendSiteRegistrationEmail(options: {
           <li><strong>サイト名:</strong> ${siteName}</li>
           <li><strong>URL:</strong> <a href="${baseUrl}">${baseUrl}</a></li>
         </ul>
-        <p>SiteGPT チームが順次学習・セットアップを行い、完了次第ご連絡いたします。</p>
+        <p>WEBGPT チームが順次学習・セットアップを行い、完了次第ご連絡いたします。</p>
         <p style="margin-top: 24px; font-size: 12px; color: #64748b;">
           このメールに心当たりがない場合は support@sitegpt.jp までお問い合わせください。
         </p>
@@ -58,4 +58,3 @@ export async function sendSiteRegistrationEmail(options: {
     `,
   });
 }
-
