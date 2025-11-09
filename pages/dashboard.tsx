@@ -693,6 +693,18 @@ export default function Dashboard() {
             </div>
           )}
 
+          {isAdmin && (
+            <div className="mb-6 flex justify-end">
+              <Link
+                href="/dashboard/admin/usage"
+                className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+              >
+                管理者向け使用状況を見る
+                <span aria-hidden>→</span>
+              </Link>
+            </div>
+          )}
+
         {sites.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-white/20 bg-white/5 px-6 py-12 text-center text-slate-300">
             <p className="mb-4 text-base text-slate-200">登録されているサイトがありません</p>

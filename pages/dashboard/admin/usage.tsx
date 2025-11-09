@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 import Layout from '@/components/layout';
+import Link from 'next/link';
 import { createSupabaseClient } from '@/utils/supabase-auth';
 
 interface TenantUsage {
@@ -22,6 +23,19 @@ interface UsageResponse {
     end: string;
   };
   tenants: TenantUsage[];
+  training_jobs: TrainingJobSummary[];
+}
+
+interface TrainingJobSummary {
+  id: string;
+  site_id: string | null;
+  site_name: string | null;
+  user_id: string | null;
+  status: string;
+  processed_pages: number | null;
+  estimated_cost_usd: number;
+  created_at: string;
+  finished_at: string | null;
 }
 
 const ADMIN_IDS = (process.env.NEXT_PUBLIC_ADMIN_USER_IDS || '')
@@ -133,9 +147,7 @@ export default function AdminUsagePage() {
   if (authLoading) {
     return (
       <Layout>
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="text-gray-500">認証確認中...</div>
-        </div>
+        <div className="flex min-h-screen items-center justify-center text-slate-200">認証確認中...</div>
       </Layout>
     );
   }
@@ -143,105 +155,180 @@ export default function AdminUsagePage() {
   if (!isAdmin) {
     return (
       <Layout>
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="text-red-500">このページへのアクセス権限がありません。</div>
-        </div>
+        <div className="flex min-h-screen items-center justify-center text-red-400">このページへのアクセス権限がありません。</div>
       </Layout>
     );
   }
 
   return (
     <Layout>
-      <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold">管理者向け使用状況</h1>
-            <p className="text-gray-600 text-sm">各テナントの月次使用量・コストを確認できます。</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-gray-600" htmlFor="month">
-              月を選択
-            </label>
-            <input
-              id="month"
-              type="month"
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
-            />
-          </div>
+      <div className="relative mx-auto max-w-6xl px-4 py-6 text-slate-100 sm:py-8">
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute inset-x-0 top-0 h-48 bg-gradient-to-b from-emerald-500/20 to-transparent blur-3xl" />
+          <div className="absolute bottom-[-20%] left-[-10%] h-72 w-72 rounded-full bg-cyan-400/15 blur-[140px]" />
         </div>
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-            {error}
-          </div>
-        )}
-
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="text-gray-500">読み込み中...</div>
-          </div>
-        ) : data ? (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-white border border-gray-200 rounded-lg p-4">
-                <p className="text-xs text-gray-500">総チャット回数</p>
-                <p className="text-2xl font-semibold">{totals?.chat_count.toLocaleString()}</p>
+        <div className="relative space-y-8">
+          <div className="rounded-[32px] border border-white/10 bg-white/5 p-6 shadow-[0_35px_120px_rgba(1,6,3,0.55)] backdrop-blur-2xl">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <Link
+                  href="/dashboard"
+                  className="text-[11px] uppercase tracking-[0.35em] text-emerald-200/80"
+                >
+                  ← ダッシュボード
+                </Link>
+                <h1 className="mt-2 text-3xl font-semibold text-white">管理者向け 使用状況</h1>
+                <p className="mt-1 text-sm text-slate-300">各テナントの月次使用量と概算コストをモニタリングできます</p>
               </div>
-              <div className="bg-white border border-gray-200 rounded-lg p-4">
-                <p className="text-xs text-gray-500">総埋め込みトークン</p>
-                <p className="text-2xl font-semibold">{totals?.embedding_tokens.toLocaleString()}</p>
-              </div>
-              <div className="bg-white border border-gray-200 rounded-lg p-4">
-                <p className="text-xs text-gray-500">総コスト（USD）</p>
-                <p className="text-2xl font-semibold">{formatCurrency(totals?.total_cost_usd || 0)}</p>
-              </div>
+              <label className="flex flex-col text-xs font-medium uppercase tracking-[0.25em] text-slate-400">
+                表示月
+                <input
+                  id="month"
+                  type="month"
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="mt-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-base tracking-normal text-white shadow-inner shadow-white/5 focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
+                />
+              </label>
             </div>
+          </div>
 
-            <div className="overflow-x-auto bg-white border border-gray-200 rounded-lg">
-              <table className="min-w-full divide-y divide-gray-200 text-sm">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-3 py-2 text-left font-medium text-gray-600">User ID</th>
-                    <th className="px-3 py-2 text-left font-medium text-gray-600">Plan</th>
-                    <th className="px-3 py-2 text-right font-medium text-gray-600">Chats</th>
-                    <th className="px-3 py-2 text-right font-medium text-gray-600">Embedding Tokens</th>
-                    <th className="px-3 py-2 text-right font-medium text-gray-600">Training</th>
-                    <th className="px-3 py-2 text-right font-medium text-gray-600">Cost (USD)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {data.tenants.length === 0 ? (
+          {error && (
+            <div className="rounded-[24px] border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+              {error}
+            </div>
+          )}
+
+          {loading ? (
+            <div className="flex items-center justify-center py-12 text-slate-300">読み込み中...</div>
+          ) : data ? (
+            <>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div className="rounded-[28px] border border-white/10 bg-white/5 p-4">
+                  <p className="text-xs uppercase tracking-[0.3em] text-emerald-200">総チャット回数</p>
+                  <p className="mt-2 text-3xl font-semibold text-white">{totals?.chat_count.toLocaleString()}</p>
+                </div>
+                <div className="rounded-[28px] border border-white/10 bg-white/5 p-4">
+                  <p className="text-xs uppercase tracking-[0.3em] text-emerald-200">総埋め込みトークン</p>
+                  <p className="mt-2 text-3xl font-semibold text-white">{totals?.embedding_tokens.toLocaleString()}</p>
+                </div>
+                <div className="rounded-[28px] border border-white/10 bg-gradient-to-br from-emerald-500/20 via-cyan-400/10 to-slate-900 p-4">
+                  <p className="text-xs uppercase tracking-[0.3em] text-emerald-200">総コスト（USD）</p>
+                  <p className="mt-2 text-3xl font-semibold text-white">{formatCurrency(totals?.total_cost_usd || 0)}</p>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-[28px] border border-white/10 bg-white/5">
+                <table className="min-w-full divide-y divide-white/10 text-sm">
+                  <thead className="bg-white/5 text-slate-300">
                     <tr>
-                      <td colSpan={6} className="px-3 py-4 text-center text-gray-500">
-                        データがありません
-                      </td>
+                      <th className="px-3 py-2 text-left font-medium">User ID</th>
+                      <th className="px-3 py-2 text-left font-medium">Plan</th>
+                      <th className="px-3 py-2 text-right font-medium">Chats</th>
+                      <th className="px-3 py-2 text-right font-medium">Embedding Tokens</th>
+                      <th className="px-3 py-2 text-right font-medium">Training</th>
+                      <th className="px-3 py-2 text-right font-medium">Cost (USD)</th>
                     </tr>
-                  ) : (
-                    data.tenants.map((tenant) => (
-                      <tr key={tenant.user_id}>
-                        <td className="px-3 py-2 font-mono text-xs break-all">{tenant.user_id}</td>
-                        <td className="px-3 py-2">
-                          {tenant.plan || '-'}
-                          {tenant.chat_quota ? (
-                            <span className="block text-xs text-gray-500">
-                              チャット {tenant.chat_quota.toLocaleString()} / 埋め込み {tenant.embedding_quota?.toLocaleString() ?? '-'}
-                            </span>
-                          ) : null}
+                  </thead>
+                  <tbody className="divide-y divide-white/10 text-slate-200">
+                    {data.tenants.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-3 py-6 text-center text-slate-400">
+                          データがありません
                         </td>
-                        <td className="px-3 py-2 text-right">{tenant.chat_count.toLocaleString()}</td>
-                        <td className="px-3 py-2 text-right">{tenant.embedding_tokens.toLocaleString()}</td>
-                        <td className="px-3 py-2 text-right">{tenant.training_count.toLocaleString()}</td>
-                        <td className="px-3 py-2 text-right">{formatCurrency(tenant.total_cost_usd)}</td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </>
-        ) : null}
+                    ) : (
+                      data.tenants.map((tenant) => (
+                        <tr key={tenant.user_id}>
+                          <td className="px-3 py-2 font-mono text-xs break-all text-slate-400">{tenant.user_id}</td>
+                          <td className="px-3 py-2">
+                            <p className="capitalize text-white">{tenant.plan || '-'}</p>
+                            {tenant.chat_quota ? (
+                              <span className="text-xs text-slate-400">
+                                チャット {tenant.chat_quota.toLocaleString()} / 埋め込み {tenant.embedding_quota?.toLocaleString() ?? '-'}
+                              </span>
+                            ) : null}
+                          </td>
+                          <td className="px-3 py-2 text-right">{tenant.chat_count.toLocaleString()}</td>
+                          <td className="px-3 py-2 text-right">{tenant.embedding_tokens.toLocaleString()}</td>
+                          <td className="px-3 py-2 text-right">{tenant.training_count.toLocaleString()}</td>
+                          <td className="px-3 py-2 text-right text-emerald-200">{formatCurrency(tenant.total_cost_usd)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="rounded-[28px] border border-white/10 bg-white/5 p-6">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.35em] text-emerald-200">Training Jobs</p>
+                    <h2 className="text-2xl font-semibold text-white">学習ジョブ履歴</h2>
+                    <p className="text-sm text-slate-400">期間中に実行された学習ジョブと概算コスト</p>
+                  </div>
+                  <div className="text-right text-sm text-slate-300">
+                    合計コスト:
+                    <span className="ml-2 text-xl font-semibold text-emerald-200">
+                      {formatCurrency(
+                        data.training_jobs.reduce((sum, job) => sum + job.estimated_cost_usd, 0),
+                      )}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mt-4 overflow-x-auto">
+                  <table className="min-w-full divide-y divide-white/10 text-sm">
+                    <thead className="bg-white/5 text-slate-300">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-medium">Job ID</th>
+                        <th className="px-3 py-2 text-left font-medium">Site</th>
+                        <th className="px-3 py-2 text-left font-medium">Status</th>
+                        <th className="px-3 py-2 text-right font-medium">Pages</th>
+                        <th className="px-3 py-2 text-right font-medium">Cost (USD)</th>
+                        <th className="px-3 py-2 text-right font-medium">Started</th>
+                        <th className="px-3 py-2 text-right font-medium">Finished</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/10 text-slate-200">
+                      {data.training_jobs.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="px-3 py-4 text-center text-slate-400">
+                            対象期間の学習ジョブはありません
+                          </td>
+                        </tr>
+                      ) : (
+                        data.training_jobs.map((job) => (
+                          <tr key={job.id}>
+                            <td className="px-3 py-2 font-mono text-xs text-slate-400">{job.id}</td>
+                            <td className="px-3 py-2">
+                              <p className="text-sm text-white">{job.site_name || job.site_id || '-'}</p>
+                              {job.user_id && (
+                                <span className="text-xs text-slate-400">{job.user_id}</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 capitalize">{job.status}</td>
+                            <td className="px-3 py-2 text-right">{job.processed_pages ?? '-'}</td>
+                            <td className="px-3 py-2 text-right text-emerald-200">{formatCurrency(job.estimated_cost_usd)}</td>
+                            <td className="px-3 py-2 text-right text-xs text-slate-400">
+                              {new Date(job.created_at).toLocaleString('ja-JP', { hour12: false })}
+                            </td>
+                            <td className="px-3 py-2 text-right text-xs text-slate-400">
+                              {job.finished_at
+                                ? new Date(job.finished_at).toLocaleString('ja-JP', { hour12: false })
+                                : '-'}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          ) : null}
+        </div>
       </div>
     </Layout>
   );

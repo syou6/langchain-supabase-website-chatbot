@@ -17,6 +17,18 @@ interface MonthSummary extends UsageSummary {
   embedding_quota: number | null;
 }
 
+interface TrainingJobSummary {
+  id: string;
+  site_id: string | null;
+  site_name: string | null;
+  user_id: string | null;
+  status: string;
+  processed_pages: number | null;
+  estimated_cost_usd: number;
+  created_at: string;
+  finished_at: string | null;
+}
+
 function parseMonth(month?: string) {
   const now = new Date();
   if (!month) {
@@ -128,6 +140,33 @@ export default async function handler(
       };
     });
 
+    const { data: trainingRows, error: trainingError } = await supabaseClient
+      .from('training_jobs')
+      .select(
+        'id, site_id, status, processed_pages, estimated_cost_usd, created_at, finished_at, sites ( id, name, user_id )',
+      )
+      .gte('created_at', start.toISOString())
+      .lt('created_at', end.toISOString());
+
+    if (trainingError) {
+      throw trainingError;
+    }
+
+    const training_jobs: TrainingJobSummary[] = (trainingRows || []).map((row) => {
+      const siteData = Array.isArray(row.sites) ? row.sites[0] : row.sites;
+      return {
+        id: row.id,
+        site_id: row.site_id,
+        site_name: siteData?.name ?? null,
+        user_id: siteData?.user_id ?? null,
+        status: row.status,
+        processed_pages: row.processed_pages,
+        estimated_cost_usd: Number(row.estimated_cost_usd || 0),
+        created_at: row.created_at,
+        finished_at: row.finished_at,
+      };
+    });
+
     return res.status(200).json({
       month: label,
       range: {
@@ -135,6 +174,7 @@ export default async function handler(
         end: end.toISOString(),
       },
       tenants,
+      training_jobs,
     });
   } catch (error: any) {
     if (error.message === 'Unauthorized') {
