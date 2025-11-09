@@ -225,7 +225,8 @@ function generateEmbedScript(siteId: string, apiBaseUrl: string): string {
       }
 
       if (answer) {
-        addMessage(answer, false);
+        const cleaned = answer.replace(/\*\*(.*?)\*\*/g, '$1');
+        addMessage(cleaned, false);
       } else {
         addMessage('申し訳ございません。回答を取得できませんでした。', false);
       }

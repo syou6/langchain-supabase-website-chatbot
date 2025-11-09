@@ -5,6 +5,15 @@ import { SupabaseVectorStore } from '@langchain/community/vectorstores/supabase'
 import { openai } from '@/utils/openai-client';
 import { supabaseClient } from '@/utils/supabase-client';
 import { makeChain } from '@/utils/makechain';
+
+function sanitizeChunk(raw: string) {
+  if (!raw) return '';
+  const withoutBold = raw.replace(/\*\*(.*?)\*\*/g, '$1');
+  return withoutBold
+    .replace(/\r/g, '')
+    .replace(/\t/g, ' ')
+    .replace(/ +/g, ' ');
+}
 import { requireAuth } from '@/utils/supabase-auth';
 
 // トークン数の概算計算（文字数から概算、1トークン ≈ 4文字）
@@ -177,13 +186,16 @@ export default async function handler(
 
   const model = openai;
   // create the chain with streaming callback
-  const chain = makeChain(vectorStore, (token: string) => {
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[Chat API] Streaming token:', token.substring(0, 50));
-    }
-    outputText += token;
-    sendData(JSON.stringify({ data: token }));
-  }, retriever);
+    const chain = makeChain(vectorStore, (token: string) => {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Chat API] Streaming token:', token.substring(0, 50));
+      }
+      const clean = sanitizeChunk(token);
+      outputText += clean;
+      if (clean) {
+        sendData(JSON.stringify({ data: clean }));
+      }
+    }, retriever);
 
   try {
     if (process.env.NODE_ENV === 'development') {

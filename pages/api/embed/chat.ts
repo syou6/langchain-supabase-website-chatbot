@@ -6,6 +6,15 @@ import { openai } from '@/utils/openai-client';
 import { supabaseClient } from '@/utils/supabase-client';
 import { makeChain } from '@/utils/makechain';
 
+function sanitizeChunk(raw: string) {
+  if (!raw) return '';
+  const withoutBold = raw.replace(/\*\*(.*?)\*\*/g, '$1');
+  return withoutBold
+    .replace(/\r/g, '')
+    .replace(/\t/g, ' ')
+    .replace(/ +/g, ' ');
+}
+
 // トークン数の概算計算（文字数から概算、1トークン ≈ 4文字）
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
@@ -181,8 +190,11 @@ export default async function handler(
       if (process.env.NODE_ENV === 'development') {
         console.log('[Embed Chat API] Streaming token:', token.substring(0, 50));
       }
-      outputText += token;
-      sendData(JSON.stringify({ data: token }));
+      const clean = sanitizeChunk(token);
+      outputText += clean;
+      if (clean) {
+        sendData(JSON.stringify({ data: clean }));
+      }
     }, retriever);
 
     try {
