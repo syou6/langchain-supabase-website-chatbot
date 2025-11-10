@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Layout from '@/components/layout';
 import Link from 'next/link';
+import Button from '@/components/ui/Button';
 import { createSupabaseClient } from '@/utils/supabase-auth';
 import {
   PLAN_CONFIG,
@@ -523,17 +524,15 @@ export default function PlansPage() {
                       ))}
                     </div>
 
-                    <button
+                    <Button
                       onClick={() => handleCheckout(plan.tier)}
                       disabled={buttonDisabled}
-                      className={`mt-6 w-full rounded-full px-4 py-2.5 text-sm font-semibold transition ${
-                        buttonDisabled
-                          ? 'cursor-not-allowed border border-premium-stroke/40 bg-premium-base/40 text-premium-muted'
-                          : 'bg-gradient-to-r from-premium-accent via-premium-accentGlow to-premium-accent text-black shadow-glow hover:-translate-y-0.5'
-                      }`}
+                      variant={buttonDisabled ? 'secondary' : 'primary'}
+                      size="full"
+                      className="mt-6"
                     >
                       {buttonLabel}
-                    </button>
+                    </Button>
                     <p className="mt-2 text-xs text-premium-muted">
                       {isCurrentPlan
                         ? 'ご利用中のプランです'

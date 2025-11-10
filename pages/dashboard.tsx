@@ -2,6 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Layout from '@/components/layout';
 import Link from 'next/link';
+import Button from '@/components/ui/Button';
+import Card from '@/components/ui/Card';
+import Surface from '@/components/ui/Surface';
 import { createSupabaseClient } from '@/utils/supabase-auth';
 import Onboarding from '@/components/Onboarding';
 import { InternalPlan } from '@/lib/planConfig';
@@ -682,9 +685,9 @@ export default function Dashboard() {
   // ステータスバッジのスタイル
   const getStatusBadge = (status: Site['status']) => {
     const styles = {
-      idle: 'border-white/10 bg-white/5 text-slate-200',
-      training: 'border-emerald-400/30 bg-emerald-400/15 text-emerald-100 animate-pulse',
-      ready: 'border-emerald-400/40 bg-emerald-500/20 text-emerald-100',
+      idle: 'border-premium-stroke/40 bg-premium-surface/70 text-premium-muted',
+      training: 'border-emerald-400/30 bg-emerald-400/15 text-premium-accent animate-pulse',
+      ready: 'border-emerald-400/40 bg-emerald-500/20 text-premium-accent',
       error: 'border-rose-400/40 bg-rose-500/20 text-rose-100',
     } as const;
     return (
@@ -700,6 +703,62 @@ export default function Dashboard() {
   const formatDate = (dateString: string | null) => {
     if (!dateString) return '-';
     return new Date(dateString).toLocaleString('ja-JP');
+  };
+
+  const renderUserSiteActions = (site: Site) => {
+    const isReady = site.status === 'ready';
+    const isTraining = site.status === 'training';
+    const timeline = [
+      { label: 'URL登録完了', done: true },
+      { label: 'WEBGPTが学習', done: isTraining || isReady },
+      { label: 'チャットを埋め込んで公開', done: isReady },
+    ];
+
+    const statusMessage = isReady
+      ? '学習が完了しました。埋め込みコードを貼るとそのままチャットを稼働できます。'
+      : isTraining
+      ? '運営がURLをもとに学習を進めています。完了するとメールとダッシュボードでお知らせします。'
+      : 'WEBGPTチームが順次学習を開始します。追加URLがあればサポートまでお知らせください。';
+
+    return (
+      <div className="mt-6 space-y-3">
+        <Card className="space-y-3 px-4 py-3">
+          <div>
+            <p className="text-sm font-semibold text-premium-text">
+              {isReady ? 'チャットを公開する準備ができました' : '現在のステータス: ' + STATUS_LABELS[site.status]}
+            </p>
+            <p className="mt-1 text-xs text-premium-muted">{statusMessage}</p>
+          </div>
+          {isReady && (
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button size="md" onClick={() => router.push(`/dashboard/sites/${site.id}/embed`)}>
+                埋め込みコードを見る
+              </Button>
+              <Button
+                size="md"
+                variant="secondary"
+                onClick={() => router.push(`/dashboard/${site.id}`)}
+              >
+                この場でチャットをテスト
+              </Button>
+            </div>
+          )}
+        </Card>
+        <Card className="space-y-2 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-premium-muted">Progress</p>
+          <ol className="space-y-2 text-xs text-premium-muted">
+            {timeline.map((step, idx) => (
+              <li key={step.label} className="flex items-center gap-2">
+                <span
+                  className={`h-2 w-2 rounded-full ${step.done ? 'bg-premium-accent' : 'bg-premium-stroke/60'}`}
+                />
+                <span className={step.done ? 'text-premium-text' : undefined}>{idx + 1}. {step.label}</span>
+              </li>
+            ))}
+          </ol>
+        </Card>
+      </div>
+    );
   };
 
   const recentSite = [...sites].filter((s) => s.last_trained_at).sort((a, b) => {
@@ -720,7 +779,7 @@ export default function Dashboard() {
     return (
       <Layout>
         <div className="flex min-h-screen items-center justify-center">
-          <div className="rounded-full border border-white/10 bg-white/5 px-6 py-3 text-sm uppercase tracking-[0.2em] text-slate-200">
+          <div className="rounded-full border border-premium-stroke/40 bg-premium-surface/70 px-6 py-3 text-sm uppercase tracking-[0.2em] text-premium-muted">
             読み込み中...
           </div>
         </div>
@@ -737,7 +796,7 @@ export default function Dashboard() {
           }}
         />
       )}
-      <div className="relative mx-auto max-w-6xl overflow-hidden rounded-[32px] border border-white/10 bg-white/5 px-4 py-6 text-slate-100 shadow-[0_45px_120px_rgba(1,8,4,0.65)] backdrop-blur-2xl sm:px-8 sm:py-10">
+      <Surface className="relative mx-auto max-w-6xl overflow-hidden px-4 py-6 text-premium-text shadow-[0_45px_120px_rgba(1,8,4,0.65)] sm:px-8 sm:py-10">
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute -top-16 right-12 h-48 w-48 rounded-full bg-emerald-500/20 blur-3xl" />
           <div className="absolute bottom-0 left-0 h-64 w-64 rounded-full bg-teal-400/10 blur-[140px]" />
@@ -745,8 +804,8 @@ export default function Dashboard() {
         <div className="relative z-10">
           <div className="mb-8 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
             <div>
-              <p className="text-xs uppercase tracking-[0.4em] text-emerald-200/80">Control Panel</p>
-              <h1 className="text-2xl font-semibold text-white md:text-3xl">ダッシュボード</h1>
+              <p className="text-xs uppercase tracking-[0.4em] text-premium-muted/80">Control Panel</p>
+              <h1 className="text-2xl font-semibold text-premium-text md:text-3xl">ダッシュボード</h1>
             </div>
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
               <button
@@ -754,14 +813,14 @@ export default function Dashboard() {
                   await supabase.auth.signOut();
                   router.push('/auth/login');
                 }}
-                className="inline-flex flex-1 items-center justify-center rounded-full border border-white/15 bg-white/5 px-5 py-2 text-sm font-medium text-slate-100 transition hover:bg-white/10"
+                className="inline-flex flex-1 items-center justify-center rounded-full border border-premium-stroke/50 bg-premium-surface/70 px-5 py-2 text-sm font-medium text-premium-text transition hover:bg-premium-elevated/70"
               >
                 ログアウト
               </button>
               <button
                 id="onboarding-create-site-btn"
                 onClick={() => setShowModal(true)}
-                className="inline-flex flex-1 items-center justify-center rounded-full bg-gradient-to-r from-emerald-400 via-green-300 to-cyan-300 px-5 py-2 text-sm font-semibold text-slate-900 shadow-[0_25px_45px_rgba(16,185,129,0.35)] transition hover:-translate-y-0.5"
+                className="inline-flex flex-1 items-center justify-center rounded-full bg-gradient-to-r from-premium-accent via-premium-accentGlow to-premium-accent px-5 py-2 text-sm font-semibold text-slate-900 shadow-[0_25px_45px_rgba(16,185,129,0.35)] transition hover:-translate-y-0.5"
               >
                 + 新規サイト登録
               </button>
@@ -770,41 +829,38 @@ export default function Dashboard() {
 
           <section className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3">
             {heroStats.map((stat) => (
-              <div
-                key={stat.label}
-                className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 px-5 py-4 backdrop-blur-xl"
-              >
+              <Card key={stat.label} className="relative overflow-hidden px-5 py-4">
                 <div className="absolute inset-0 opacity-60">
                   {stat.accent && (
                     <div className="absolute inset-y-0 right-0 w-1/2 bg-gradient-to-l from-emerald-400/25 to-transparent blur-3xl" />
                   )}
                 </div>
                 <div className="relative">
-                  <p className="text-xs uppercase tracking-[0.25em] text-slate-400">{stat.label}</p>
-                  <p className={`mt-2 text-2xl font-semibold ${stat.accent ? 'text-emerald-200' : 'text-white'}`}>
+                  <p className="text-xs uppercase tracking-[0.25em] text-premium-muted">{stat.label}</p>
+                  <p className={`mt-2 text-2xl font-semibold ${stat.accent ? 'text-premium-muted' : 'text-premium-text'}`}>
                     {stat.value}
                   </p>
                 </div>
-              </div>
+              </Card>
             ))}
           </section>
 
           {!isAdmin && (
-            <div className="mb-8 rounded-3xl border border-dashed border-white/15 bg-white/5 px-5 py-4 text-sm text-slate-200">
+            <Card variant="dashed" className="mb-8 px-5 py-4 text-sm text-premium-muted">
               <p>
                 現在、チャットボットの学習と埋め込み設定は WEBGPT チームが代行します。必要な URL を登録しておくだけで大丈夫です。
               </p>
-              <p className="mt-2 text-xs text-slate-400">
+              <p className="mt-2 text-xs text-premium-muted">
                 {userEmail ? `ログイン中: ${userEmail}` : 'ログインユーザー情報を取得しています…'} / 学習は順次対応します。
               </p>
-            </div>
+            </Card>
           )}
 
           {isAdmin && (
             <div className="mb-6 flex justify-end">
               <Link
                 href="/dashboard/admin/usage"
-                className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+                className="inline-flex items-center gap-2 rounded-full border border-premium-stroke/50 bg-premium-surface/70 px-4 py-2 text-sm font-semibold text-premium-text transition hover:bg-premium-elevated/70"
               >
                 管理者向け使用状況を見る
                 <span aria-hidden>→</span>
@@ -816,14 +872,14 @@ export default function Dashboard() {
           <div className="mb-6 rounded-3xl border border-emerald-400/40 bg-emerald-400/10 p-4 text-sm text-emerald-50 shadow-[0_25px_80px_rgba(16,185,129,0.15)] sm:p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-base font-semibold text-white">サイト登録ありがとうございます！</p>
-                <p className="mt-1 text-xs text-emerald-100 sm:text-sm">
+                <p className="text-base font-semibold text-premium-text">サイト登録ありがとうございます！</p>
+                <p className="mt-1 text-xs text-premium-accent sm:text-sm">
                   学習着手はサブスク契約後に順次行います。アップグレードして優先的にセットアップを進めましょう。
                 </p>
               </div>
               <Link
                 href="/dashboard/plans"
-                className="inline-flex items-center justify-center rounded-full bg-white px-5 py-2 text-sm font-semibold text-emerald-700 shadow-[0_20px_45px_rgba(255,255,255,0.25)] transition hover:-translate-y-0.5"
+                className="inline-flex items-center justify-center rounded-full bg-white px-5 py-2 text-sm font-semibold text-premium-accentDeep shadow-[0_20px_45px_rgba(255,255,255,0.25)] transition hover:-translate-y-0.5"
               >
                 プランを確認する
               </Link>
@@ -835,12 +891,12 @@ export default function Dashboard() {
           !planLoading &&
           !isAdmin &&
           ((userPlan && userPlan !== 'pending') || paymentSuccess) && (
-            <div className="mb-6 rounded-3xl border border-white/15 bg-white/5 p-4 text-sm text-slate-100 shadow-[0_25px_80px_rgba(15,23,42,0.45)] sm:p-5">
-            <p className="text-base font-semibold text-white">ご契約ありがとうございます！</p>
-            <p className="mt-1 text-xs text-slate-200 sm:text-sm">
+            <div className="mb-6 rounded-3xl border border-premium-stroke/50 bg-premium-surface/70 p-4 text-sm text-premium-text shadow-[0_25px_80px_rgba(15,23,42,0.45)] sm:p-5">
+            <p className="text-base font-semibold text-premium-text">ご契約ありがとうございます！</p>
+            <p className="mt-1 text-xs text-premium-muted sm:text-sm">
               WEBGPT チームが登録済み URL をもとにチャットボットの学習を開始します。対応完了までは管理者からのご連絡をお待ちください。
             </p>
-            <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-slate-300">
+            <ul className="mt-3 list-disc space-y-1 pl-5 text-xs text-premium-muted">
               <li>登録内容に不足がある場合はメールで確認させていただきます</li>
               <li>学習完了後、ダッシュボードとメールで稼働開始をお知らせします</li>
               <li>お急ぎの際はサポートチャットからご連絡ください</li>
@@ -852,7 +908,7 @@ export default function Dashboard() {
                   window.localStorage.removeItem('recent_payment_success');
                 }
               }}
-              className="mt-4 inline-flex items-center justify-center rounded-full border border-white/20 px-4 py-1.5 text-xs font-semibold text-white transition hover:border-white/40"
+              className="mt-4 inline-flex items-center justify-center rounded-full border border-premium-stroke/60 px-4 py-1.5 text-xs font-semibold text-premium-text transition hover:border-white/40"
             >
               表示を閉じる
             </button>
@@ -860,60 +916,60 @@ export default function Dashboard() {
         )}
 
         {sites.length === 0 ? (
-          <div className="rounded-3xl border border-dashed border-white/20 bg-white/5 px-6 py-12 text-center text-slate-300">
-            <p className="mb-4 text-base text-slate-200">登録されているサイトがありません</p>
+          <Card variant="dashed" className="px-6 py-12 text-center text-premium-muted">
+            <p className="mb-4 text-base text-premium-muted">登録されているサイトがありません</p>
             <button
               onClick={() => setShowModal(true)}
-              className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-emerald-400 via-green-300 to-cyan-300 px-6 py-2.5 text-sm font-semibold text-slate-900 shadow-[0_20px_40px_rgba(16,185,129,0.35)] transition hover:-translate-y-0.5"
+              className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-premium-accent via-premium-accentGlow to-premium-accent px-6 py-2.5 text-sm font-semibold text-slate-900 shadow-[0_20px_40px_rgba(16,185,129,0.35)] transition hover:-translate-y-0.5"
             >
               最初のサイトを登録する
             </button>
-          </div>
+          </Card>
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 md:gap-6">
             {sites.map((site) => (
-              <div
+              <Card
                 key={site.id}
-                className="group relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-5 shadow-[0_35px_120px_rgba(1,3,6,0.55)] transition hover:border-emerald-400/30 hover:shadow-[0_45px_140px_rgba(1,8,4,0.65)] backdrop-blur-xl"
+                className="group relative overflow-hidden p-5 shadow-[0_35px_120px_rgba(1,3,6,0.55)] transition hover:border-emerald-400/30 hover:shadow-[0_45px_140px_rgba(1,8,4,0.65)]"
               >
                 <div className="pointer-events-none absolute inset-0 opacity-60">
                   <div className="absolute right-0 top-0 h-32 w-32 rounded-full bg-emerald-500/20 blur-[80px]" />
                 </div>
                 <div className="relative">
                   <div className="mb-3 flex items-start justify-between gap-2 md:mb-4">
-                    <h2 className="flex-1 break-words text-lg font-semibold text-white md:text-xl">
+                    <h2 className="flex-1 break-words text-lg font-semibold text-premium-text md:text-xl">
                       {site.name}
                     </h2>
                     <div className="flex-shrink-0">{getStatusBadge(site.status)}</div>
                   </div>
                   {isAdmin && (
-                    <p className="mb-3 text-xs text-slate-400">
+                    <p className="mb-3 text-xs text-premium-muted">
                       所有者: {site.owner_email ?? '不明'}
                     </p>
                   )}
 
-                  <div className="mb-4 space-y-2 text-xs text-slate-300 md:text-sm">
+                  <div className="mb-4 space-y-2 text-xs text-premium-muted md:text-sm">
                     <div>
-                      <span className="font-medium text-slate-200">URL:</span>{' '}
+                      <span className="font-medium text-premium-muted">URL:</span>{' '}
                       <a
                         href={site.base_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="break-all text-emerald-200 underline-offset-4 hover:underline"
+                        className="break-all text-premium-muted underline-offset-4 hover:underline"
                       >
                         {site.base_url}
                       </a>
                     </div>
                     {site.last_trained_at && (
                       <div>
-                        <span className="font-medium text-slate-200">最終学習:</span>{' '}
-                        <span className="break-words text-slate-100">{formatDate(site.last_trained_at)}</span>
+                        <span className="font-medium text-premium-muted">最終学習:</span>{' '}
+                        <span className="break-words text-premium-text">{formatDate(site.last_trained_at)}</span>
                       </div>
                     )}
                   </div>
 
                   {site.status === 'training' && (
-                    <div className="mb-4 text-xs text-slate-200 md:text-sm">
+                    <Card className="mb-4 border border-premium-stroke/40 bg-premium-surface/70 px-4 py-3 text-xs text-premium-muted md:text-sm">
                       {(() => {
                         const job = trainingJobs.get(site.id);
                         const processedPages = job?.processed_pages || 0;
@@ -927,23 +983,23 @@ export default function Dashboard() {
                           : 'URL解析中...';
                         return (
                           <div>
-                            <div className="mb-1 flex justify-between text-xs text-slate-300">
+                            <div className="mb-1 flex justify-between text-xs text-premium-muted">
                               <span className="font-medium">学習進捗</span>
                               <span>{label}</span>
                             </div>
-                            <div className="h-2 w-full rounded-full bg-white/10">
+                            <div className="h-2 w-full rounded-full bg-premium-elevated/70">
                               <div
-                                className="h-2 rounded-full bg-gradient-to-r from-emerald-400 via-green-300 to-cyan-300 transition-all duration-300"
+                                className="h-2 rounded-full bg-gradient-to-r from-premium-accent via-premium-accentGlow to-premium-accent transition-all duration-300"
                                 style={{ width: `${progressPercent}%` }}
                               />
                             </div>
                             {!job && (
-                              <p className="mt-1 text-[11px] text-slate-400">URLリストを解析しています...</p>
+                              <p className="mt-1 text-[11px] text-premium-muted">URLリストを解析しています...</p>
                             )}
                           </div>
                         );
                       })()}
-                    </div>
+                    </Card>
                   )}
 
                   {isAdmin ? (
@@ -953,13 +1009,13 @@ export default function Dashboard() {
                           <Link
                             id="onboarding-chat-btn"
                             href={`/dashboard/${site.id}`}
-                            className="flex-1 rounded-full bg-gradient-to-r from-emerald-400 via-green-300 to-cyan-300 px-4 py-2.5 text-center text-sm font-semibold text-slate-900 shadow-[0_20px_40px_rgba(16,185,129,0.35)] transition hover:-translate-y-0.5"
+                            className="flex-1 rounded-full bg-gradient-to-r from-premium-accent via-premium-accentGlow to-premium-accent px-4 py-2.5 text-center text-sm font-semibold text-slate-900 shadow-[0_20px_40px_rgba(16,185,129,0.35)] transition hover:-translate-y-0.5"
                           >
                             チャット開始
                           </Link>
                           <button
                             onClick={() => handleStartTraining(site.id)}
-                            className="flex-1 rounded-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-100 transition hover:bg-white/10"
+                            className="flex-1 rounded-full border border-premium-stroke/40 bg-premium-surface/70 px-4 py-2.5 text-sm font-medium text-premium-text transition hover:bg-premium-elevated/70"
                           >
                             再学習
                           </button>
@@ -969,7 +1025,7 @@ export default function Dashboard() {
                         <button
                           id="onboarding-start-training-btn"
                           onClick={() => handleStartTraining(site.id)}
-                          className="flex-1 rounded-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-100 transition hover:bg-white/15"
+                          className="flex-1 rounded-full border border-premium-stroke/40 bg-premium-surface/70 px-4 py-2.5 text-sm font-medium text-premium-text transition hover:bg-white/15"
                         >
                           学習開始
                         </button>
@@ -977,7 +1033,7 @@ export default function Dashboard() {
                       {site.status === 'training' && (
                         <button
                           disabled
-                          className="flex-1 cursor-not-allowed rounded-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-400"
+                          className="flex-1 cursor-not-allowed rounded-full border border-premium-stroke/40 bg-premium-surface/70 px-4 py-2.5 text-sm font-medium text-premium-muted"
                         >
                           学習中...
                         </button>
@@ -985,7 +1041,7 @@ export default function Dashboard() {
                       {site.status === 'error' && (
                         <button
                           onClick={() => handleStartTraining(site.id)}
-                          className="flex-1 rounded-full bg-gradient-to-r from-rose-500/80 to-orange-400/80 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_20px_45px_rgba(248,113,113,0.35)]"
+                          className="flex-1 rounded-full bg-gradient-to-r from-rose-500/80 to-orange-400/80 px-4 py-2.5 text-sm font-semibold text-premium-text shadow-[0_20px_45px_rgba(248,113,113,0.35)]"
                         >
                           再学習
                         </button>
@@ -998,37 +1054,24 @@ export default function Dashboard() {
                       </button>
                     </div>
                   ) : (
-                    <div className="mt-6 space-y-3">
-                      {site.status === 'ready' && (
-                        <Link
-                          id="onboarding-chat-btn"
-                          href={`/dashboard/${site.id}`}
-                          className="block rounded-full bg-gradient-to-r from-emerald-400 via-green-300 to-cyan-300 px-4 py-2.5 text-center text-sm font-semibold text-slate-900 shadow-[0_20px_40px_rgba(16,185,129,0.35)]"
-                        >
-                          チャット開始
-                        </Link>
-                      )}
-                      <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200">
-                        <p>学習作業は運営が対応します。完了次第ご連絡します。</p>
-                        <p className="mt-1 text-xs text-slate-400">現在のステータス：{STATUS_LABELS[site.status]}</p>
-                      </div>
-                    </div>
+                    renderUserSiteActions(site)
                   )}
                 </div>
-              </div>
+              </Card>
             ))}
           </div>
         )}
 
+        </div>
         {/* 新規サイト登録Modal */}
         {showModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-            <div className="w-full max-h-[90vh] max-w-md overflow-y-auto rounded-3xl border border-white/10 bg-gradient-to-b from-[#07150f] via-[#030a08] to-[#010305] p-5 text-slate-100 shadow-[0_45px_120px_rgba(1,5,3,0.75)] md:p-6">
+            <div className="w-full max-h-[90vh] max-w-md overflow-y-auto rounded-3xl border border-premium-stroke/40 bg-gradient-to-b from-[#07150f] via-[#030a08] to-[#010305] p-5 text-premium-text shadow-[0_45px_120px_rgba(1,5,3,0.75)] md:p-6">
               <h2 className="mb-4 text-xl font-semibold md:text-2xl">新規サイト登録</h2>
               <form onSubmit={handleCreateSite}>
                 <div className="space-y-4">
                   <div>
-                    <label className="mb-1 block text-sm font-medium text-slate-200">サイト名 *</label>
+                    <label className="mb-1 block text-sm font-medium text-premium-muted">サイト名 *</label>
                     <input
                       type="text"
                       required
@@ -1036,12 +1079,12 @@ export default function Dashboard() {
                       onChange={(e) =>
                         setFormData({ ...formData, name: e.target.value })
                       }
-                      className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
+                      className="w-full rounded-2xl border border-premium-stroke/40 bg-premium-surface/70 px-4 py-2.5 text-sm text-premium-text placeholder:text-premium-muted focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
                       placeholder="例: STRIX 総合型選抜塾"
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-sm font-medium text-slate-200">ベースURL *</label>
+                    <label className="mb-1 block text-sm font-medium text-premium-muted">ベースURL *</label>
                     <input
                       type="url"
                       required
@@ -1049,24 +1092,24 @@ export default function Dashboard() {
                       onChange={(e) =>
                         setFormData({ ...formData, baseUrl: e.target.value })
                       }
-                      className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
+                      className="w-full rounded-2xl border border-premium-stroke/40 bg-premium-surface/70 px-4 py-2.5 text-sm text-premium-text placeholder:text-premium-muted focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
                       placeholder="https://example.com"
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-sm font-medium text-slate-200">サイトマップURL（オプション）</label>
+                    <label className="mb-1 block text-sm font-medium text-premium-muted">サイトマップURL（オプション）</label>
                     <input
                       type="url"
                       value={formData.sitemapUrl}
                       onChange={(e) =>
                         setFormData({ ...formData, sitemapUrl: e.target.value })
                       }
-                      className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
+                      className="w-full rounded-2xl border border-premium-stroke/40 bg-premium-surface/70 px-4 py-2.5 text-sm text-premium-text placeholder:text-premium-muted focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
                       placeholder="https://example.com/sitemap.xml"
                     />
                   </div>
                   <div>
-                    <label className="mb-1 block text-sm font-medium text-slate-200">URLリスト（オプション）</label>
+                    <label className="mb-1 block text-sm font-medium text-premium-muted">URLリスト（オプション）</label>
                     <div className="mb-2 space-y-2">
                       {urlInputs.map((urlInput, index) => (
                         <div key={index} className="flex gap-2">
@@ -1113,7 +1156,7 @@ export default function Dashboard() {
                                 }
                               }
                             }}
-                            className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
+                            className="flex-1 rounded-2xl border border-premium-stroke/40 bg-premium-surface/70 px-3 py-2 text-sm text-premium-text placeholder:text-premium-muted focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
                             placeholder="https://example.com/page1"
                           />
                           {index === urlInputs.length - 1 && (
@@ -1122,7 +1165,7 @@ export default function Dashboard() {
                               onClick={() => {
                                 setUrlInputs([...urlInputs, '']);
                               }}
-                              className="flex items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-slate-100 transition hover:bg-white/15"
+                              className="flex items-center justify-center rounded-2xl border border-premium-stroke/40 bg-premium-surface/70 px-3 py-2 text-sm font-medium text-premium-text transition hover:bg-white/15"
                               aria-label="URL入力フィールドを追加"
                             >
                               <svg
@@ -1157,12 +1200,12 @@ export default function Dashboard() {
                       ))}
                     </div>
                     {formData.urlList.length > 0 && (
-                      <div className="mb-2 max-h-40 overflow-y-auto rounded-2xl border border-white/10 bg-white/5 p-2">
+                      <div className="mb-2 max-h-40 overflow-y-auto rounded-2xl border border-premium-stroke/40 bg-premium-surface/70 p-2">
                         <div className="space-y-1">
                           {formData.urlList.map((url, index) => (
                             <div
                               key={index}
-                              className="flex items-center justify-between rounded-xl bg-white/10 px-2 py-1 text-sm text-white"
+                              className="flex items-center justify-between rounded-xl bg-premium-elevated/70 px-2 py-1 text-sm text-premium-text"
                             >
                               <span className="flex-1 truncate font-mono text-xs">{url}</span>
                               <button
@@ -1183,7 +1226,7 @@ export default function Dashboard() {
                         </div>
                       </div>
                     )}
-                    <p className="mt-1 text-xs text-slate-400">
+                    <p className="mt-1 text-xs text-premium-muted">
                       サイトマップURLより優先されます。「+」ボタンで入力フィールドを追加できます。
                     </p>
                   </div>
@@ -1196,13 +1239,13 @@ export default function Dashboard() {
                       setFormData({ name: '', baseUrl: '', sitemapUrl: '', urlList: [] });
                       setUrlInputs(['']);
                     }}
-                    className="flex-1 rounded-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-100 transition hover:bg-white/15"
+                    className="flex-1 rounded-full border border-premium-stroke/40 bg-premium-surface/70 px-4 py-2.5 text-sm font-medium text-premium-text transition hover:bg-white/15"
                   >
                     キャンセル
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 rounded-full bg-gradient-to-r from-emerald-400 via-green-300 to-cyan-300 px-4 py-2.5 text-sm font-semibold text-slate-900 shadow-[0_20px_45px_rgba(16,185,129,0.35)]"
+                    className="flex-1 rounded-full bg-gradient-to-r from-premium-accent via-premium-accentGlow to-premium-accent px-4 py-2.5 text-sm font-semibold text-slate-900 shadow-[0_20px_45px_rgba(16,185,129,0.35)]"
                   >
                     登録
                   </button>
@@ -1211,8 +1254,7 @@ export default function Dashboard() {
             </div>
           </div>
         )}
-      </div>
-    </div>
-  </Layout>
+      </Surface>
+    </Layout>
   );
 }
