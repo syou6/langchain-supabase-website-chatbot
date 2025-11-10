@@ -3,6 +3,8 @@ import { useRouter } from 'next/router';
 import Layout from '@/components/layout';
 import Link from 'next/link';
 import Button from '@/components/ui/Button';
+import Card from '@/components/ui/Card';
+import Surface from '@/components/ui/Surface';
 import { createSupabaseClient } from '@/utils/supabase-auth';
 import Onboarding from '@/components/Onboarding';
 import { InternalPlan } from '@/lib/planConfig';
@@ -233,109 +235,6 @@ export default function Dashboard() {
     };
   }, [authLoading, supabase]);
 
-  // サイト一覧を取得
-  useEffect(() => {
-    if (authLoading) return;
-
-    const fetchSites = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!session) return;
-
-      try {
-        const response = await fetch('/api/sites', {
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
-        });
-
-        if (!response.ok) {
-          if (response.status === 401) {
-            router.push('/auth/login');
-            return;
-          }
-          throw new Error('Failed to fetch sites');
-        }
-
-        const data: Site[] = await response.json();
-        setSites(data);
-
-        // Training中のサイトを追跡
-        const training = new Set<string>(
-          data.filter((s: Site) => s.status === 'training').map((s: Site) => s.id)
-        );
-        setTrainingSites(training);
-
-        await loadTrainingJobs(training);
-      } catch (error) {
-        console.error('Error fetching sites:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchSites();
-
-    // Supabase Realtimeでsitesテーブルの変更を監視
-    const setupRealtime = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!session) return;
-
-      // 既存のチャンネルを削除
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-      }
-
-      channelRef.current = supabase
-        .channel('sites-changes')
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'sites',
-            filter: `user_id=eq.${session.user.id}`,
-          },
-          (payload: any) => {
-            // サイトの変更を検知したら再取得
-            if (process.env.NODE_ENV === 'development') {
-              console.log('[Realtime] Sites table changed, fetching sites...', payload);
-            }
-            fetchSites();
-          }
-        )
-        .subscribe((status: any) => {
-          // デバッグ用: チャンネルの接続状態をログ出力（開発環境のみ）
-          if (process.env.NODE_ENV === 'development') {
-            if (status === 'SUBSCRIBED') {
-              console.log('[Realtime] Sites channel subscribed');
-            } else if (status === 'CHANNEL_ERROR') {
-              console.error('[Realtime] Sites channel error');
-            } else {
-              console.log('[Realtime] Sites channel status:', status);
-            }
-          } else if (status === 'CHANNEL_ERROR') {
-            // 本番環境でもエラーは記録
-            console.error('[Realtime] Sites channel error');
-          }
-        });
-    };
-
-    setupRealtime();
-
-    return () => {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
-      }
-    };
-  }, [authLoading, router, supabase]);
-
   const loadTrainingJobs = useCallback(async (trainingSet: Set<string>) => {
     const siteIds = Array.from(trainingSet);
 
@@ -389,9 +288,103 @@ export default function Dashboard() {
     }
   }, [supabase]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const fetchSites = useCallback(async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session) return;
+
+    try {
+      const response = await fetch('/api/sites', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          router.push('/auth/login');
+          return;
+        }
+        throw new Error('Failed to fetch sites');
+      }
+
+      const data: Site[] = await response.json();
+      setSites(data);
+
+      const training = new Set<string>(data.filter((s) => s.status === 'training').map((s) => s.id));
+      setTrainingSites(training);
+
+      await loadTrainingJobs(training);
+    } catch (error) {
+      console.error('Error fetching sites:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [loadTrainingJobs, router, supabase]);
+
+  // サイト一覧を取得
   useEffect(() => {
-  if (trainingJobsIntervalRef.current) {
+    if (authLoading) return;
+
+    fetchSites();
+
+    const setupRealtime = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) return;
+
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+      }
+
+      channelRef.current = supabase
+        .channel('sites-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'sites',
+            filter: `user_id=eq.${session.user.id}`,
+          },
+          (payload: any) => {
+            if (process.env.NODE_ENV === 'development') {
+              console.log('[Realtime] Sites table changed, fetching sites...', payload);
+            }
+            fetchSites();
+          }
+        )
+        .subscribe((status: any) => {
+          if (process.env.NODE_ENV === 'development') {
+            if (status === 'SUBSCRIBED') {
+              console.log('[Realtime] Sites channel subscribed');
+            } else if (status === 'CHANNEL_ERROR') {
+              console.error('[Realtime] Sites channel error');
+            } else {
+              console.log('[Realtime] Sites channel status:', status);
+            }
+          } else if (status === 'CHANNEL_ERROR') {
+            console.error('[Realtime] Sites channel error');
+          }
+        });
+    };
+
+    setupRealtime();
+
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+    };
+  }, [authLoading, fetchSites, supabase]);
+
+  useEffect(() => {
+    if (trainingJobsIntervalRef.current) {
       clearInterval(trainingJobsIntervalRef.current);
       trainingJobsIntervalRef.current = null;
     }
@@ -414,11 +407,8 @@ export default function Dashboard() {
         clearInterval(interval);
       }
     };
-  }, [trainingSites]);
+  }, [loadTrainingJobs, trainingSites]);
 
-  const trainingSitesKey = Array.from(trainingSites).sort().join(',');
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const setupTrainingJobsRealtime = async () => {
       const {
@@ -499,7 +489,7 @@ export default function Dashboard() {
         trainingJobsChannelRef.current = null;
       }
     };
-  }, [trainingSitesKey, supabase]);
+  }, [fetchSites, supabase, trainingSites]);
 
   // 新規サイト作成
   const handleCreateSite = async (e: React.FormEvent) => {
