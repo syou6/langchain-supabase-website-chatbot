@@ -264,12 +264,14 @@ export default function InsightsPage() {
                 </h1>
                 <p className="text-sm text-premium-muted">{site.name}</p>
               </div>
-              <Link
-                href={`/dashboard/${siteId}`}
-                className="rounded-full border border-premium-stroke/40 bg-premium-surface/70 px-4 py-2 text-sm font-medium text-premium-text hover:bg-premium-surface transition"
-              >
-                チャットに戻る
-              </Link>
+              {siteId && typeof siteId === 'string' && (
+                <Link
+                  href={`/dashboard/${siteId}`}
+                  className="rounded-full border border-premium-stroke/40 bg-premium-surface/70 px-4 py-2 text-sm font-medium text-premium-text hover:bg-premium-surface transition"
+                >
+                  チャットに戻る
+                </Link>
+              )}
             </div>
           </div>
 
