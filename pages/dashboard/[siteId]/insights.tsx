@@ -292,7 +292,7 @@ export default function InsightsPage() {
     });
   };
 
-  const maxQuestionCount = insights?.timeline.length
+  const maxQuestionCount = insights?.timeline && insights.timeline.length > 0
     ? Math.max(...insights.timeline.map((item) => item.question_count))
     : 1;
 
