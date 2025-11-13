@@ -66,3 +66,5 @@ ORDER BY s.created_at DESC;
 -- WHERE id = 'YOUR_SITE_ID'::uuid
 -- RETURNING id, name, status, is_embed_enabled;
 
+
+

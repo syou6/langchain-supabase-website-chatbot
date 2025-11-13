@@ -22,3 +22,5 @@ LEFT JOIN documents d ON s.id = d.site_id
 GROUP BY s.id, s.name, s.status, s.is_embed_enabled
 ORDER BY s.created_at DESC;
 
+
+

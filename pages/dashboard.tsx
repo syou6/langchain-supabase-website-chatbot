@@ -763,45 +763,63 @@ export default function Dashboard() {
           <div className="absolute bottom-0 left-0 h-64 w-64 rounded-full bg-teal-400/10 blur-[140px]" />
         </div>
         <div className="relative z-10">
-          <div className="mb-8 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-            <div>
-              <p className="text-xs uppercase tracking-[0.4em] text-premium-muted/80">Control Panel</p>
-              <h1 className="text-2xl font-semibold text-premium-text md:text-3xl">ダッシュボード</h1>
+          <div className="mb-10 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+            <div className="space-y-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.4em] text-premium-muted/80">Control Panel</p>
+                <h1 className="text-3xl font-semibold text-premium-text">ダッシュボード</h1>
+              </div>
+              <p className="text-sm text-premium-muted">
+                学習状況と契約ステータスを一元管理できます。Clarity を優先し、重要な指標のみ表示しています。
+              </p>
+              <div className="flex flex-wrap gap-4 text-xs text-premium-muted">
+                <div className="inline-flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-premium-accent" />
+                  <span>学習中 {trainingSites.size} 件</span>
+                </div>
+                <div className="inline-flex items-center gap-2">
+                  <span className="text-premium-muted/60">最終学習</span>
+                  <span className="font-medium text-premium-text">{lastTrainedLabel}</span>
+                </div>
+              </div>
             </div>
-            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-              <button
+            <div className="flex w-full flex-col gap-2 sm:flex-row sm:justify-end md:max-w-md">
+              <Button
+                variant="secondary"
+                size="md"
+                className="w-full sm:w-auto"
                 onClick={async () => {
                   await supabase.auth.signOut();
                   router.push('/auth/login');
                 }}
-                className="inline-flex flex-1 items-center justify-center rounded-full border border-premium-stroke/50 bg-premium-surface/70 px-5 py-2 text-sm font-medium text-premium-text transition hover:bg-premium-elevated/70"
               >
                 ログアウト
-              </button>
-              <button
+              </Button>
+              <Button
                 id="onboarding-create-site-btn"
+                size="md"
+                className="w-full sm:w-auto"
                 onClick={() => setShowModal(true)}
-                className="inline-flex flex-1 items-center justify-center rounded-full bg-gradient-to-r from-premium-accent via-premium-accentGlow to-premium-accent px-5 py-2 text-sm font-semibold text-slate-900 shadow-[0_25px_45px_rgba(16,185,129,0.35)] transition hover:-translate-y-0.5"
               >
                 + 新規サイト登録
-              </button>
+              </Button>
             </div>
           </div>
 
-          <section className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3">
+          <section className="mb-10 grid grid-cols-1 gap-4 md:grid-cols-3" aria-label="主要指標">
             {heroStats.map((stat) => (
               <Card key={stat.label} className="relative overflow-hidden px-5 py-4">
-                <div className="absolute inset-0 opacity-60">
+                <div className="absolute inset-0 opacity-50">
                   {stat.accent && (
                     <div className="absolute inset-y-0 right-0 w-1/2 bg-gradient-to-l from-emerald-400/25 to-transparent blur-3xl" />
                   )}
                 </div>
-                <div className="relative">
-                  <p className="text-xs uppercase tracking-[0.25em] text-premium-muted">{stat.label}</p>
-                  <p className={`mt-2 text-2xl font-semibold ${stat.accent ? 'text-premium-muted' : 'text-premium-text'}`}>
+                <dl className="relative">
+                  <dt className="text-xs uppercase tracking-[0.3em] text-premium-muted">{stat.label}</dt>
+                  <dd className={`mt-3 text-3xl font-semibold ${stat.accent ? 'text-premium-accent' : 'text-premium-text'}`}>
                     {stat.value}
-                  </p>
-                </div>
+                  </dd>
+                </dl>
               </Card>
             ))}
           </section>
