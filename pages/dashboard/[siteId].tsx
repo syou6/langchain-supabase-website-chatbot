@@ -6,6 +6,7 @@ import { fetchEventSource } from '@microsoft/fetch-event-source';
 import ReactMarkdown from 'react-markdown';
 import LoadingDots from '@/components/ui/LoadingDots';
 import Link from 'next/link';
+import Button from '@/components/ui/Button';
 import { createSupabaseClient } from '@/utils/supabase-auth';
 
 interface Site {
@@ -485,11 +486,11 @@ export default function SiteChat() {
   }
 
   // site.idが確実に存在することを確認
-  const siteIdForLinks = (siteId && typeof siteId === 'string') ? siteId : site?.id;
-  const embedHref = siteIdForLinks && typeof siteIdForLinks === 'string' && siteIdForLinks.length > 0 
+  const siteIdForLinks = (siteId && typeof siteId === 'string') ? siteId : (site?.id && typeof site.id === 'string' ? site.id : null);
+  const embedHref = siteIdForLinks 
     ? `/dashboard/sites/${siteIdForLinks}/embed` 
     : null;
-  const insightsHref = siteIdForLinks && typeof siteIdForLinks === 'string' && siteIdForLinks.length > 0
+  const insightsHref = siteIdForLinks
     ? `/dashboard/${siteIdForLinks}/insights`
     : null;
 
@@ -539,13 +540,19 @@ export default function SiteChat() {
                       埋め込み設定
                     </Link>
                   )}
-                  {insightsHref && (
-                    <Link
-                      href={insightsHref}
+                  {siteIdForLinks && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => {
+                        if (siteIdForLinks) {
+                          router.push(`/dashboard/${siteIdForLinks}/insights`);
+                        }
+                      }}
                       className="rounded-full border border-emerald-400/40 bg-emerald-400/15 px-4 py-1.5 text-xs font-medium text-emerald-100 transition hover:bg-emerald-400/25"
                     >
                       質問インサイト
-                    </Link>
+                    </Button>
                   )}
                   <button
                     onClick={() => setShowSidebar(true)}
