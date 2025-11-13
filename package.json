@@ -15,6 +15,7 @@
     "scrape-embed": "tsx -r dotenv/config scripts/scrape-embed.ts",
     "test-train-api": "tsx -r dotenv/config scripts/test-train-api.ts",
     "test:embed": "tsx -r dotenv/config scripts/test-embed-api.ts",
+    "test:insights": "tsx -r dotenv/config scripts/test-insights-api.ts",
     "test:redis": "tsx -r dotenv/config scripts/test-redis-connection.ts",
     "check:queue": "tsx -r dotenv/config scripts/check-queue-status.ts",
     "worker": "tsx -r dotenv/config scripts/start-worker.ts",
