@@ -115,61 +115,64 @@ export default async function handler(
     contextText: '',
     embeddingTokens: 0,
   };
+  // 引用元URLを収集する配列
+  const sourceUrls = new Set<string>();
 
-  // site_idが指定されている場合、カスタムRetrieverを作成
-  let retriever;
-  if (site_id) {
-    // カスタムRetrieverでsite_idフィルタを適用
-    const { BaseRetriever } = await import('@langchain/core/retrievers');
-    const { Document } = await import('@langchain/core/documents');
+  // カスタムRetrieverを作成（URL収集のため）
+  const { BaseRetriever } = await import('@langchain/core/retrievers');
+  const { Document } = await import('@langchain/core/documents');
+  
+  const retriever = new (class extends BaseRetriever {
+    lc_namespace = ['langchain', 'retrievers', 'supabase'];
     
-    retriever = new (class extends BaseRetriever {
-      lc_namespace = ['langchain', 'retrievers', 'supabase'];
+    async _getRelevantDocuments(query: string) {
+      // クエリの埋め込みを生成（embeddingトークン数に加算）
+      const queryEmbedding = await embeddings.embedQuery(query);
+      // text-embedding-3-smallは512次元、概算で512トークン相当
+      usageTracker.embeddingTokens += 512;
       
-      async _getRelevantDocuments(query: string) {
-        // クエリの埋め込みを生成（embeddingトークン数に加算）
-        const queryEmbedding = await embeddings.embedQuery(query);
-        // text-embedding-3-smallは512次元、概算で512トークン相当
-        usageTracker.embeddingTokens += 512;
-        
-        // match_documents関数を直接呼び出し（site_idフィルタ付き）
-        // ベクトルは配列形式で渡す（Supabaseが自動的にvector型に変換）
-        const { data, error } = await supabaseClient.rpc('match_documents', {
-          query_embedding: queryEmbedding,
-          match_count: 10, // 5→10に増やして精度向上
-          filter: {},
-          match_site_id: site_id,
-        });
-        
-        // デバッグログ：取得されたドキュメント数とsimilarityスコア
+      // match_documents関数を直接呼び出し
+      const { data, error } = await supabaseClient.rpc('match_documents', {
+        query_embedding: queryEmbedding,
+        match_count: 10,
+        filter: {},
+        match_site_id: site_id || null, // site_idがあればフィルタ、なければ全ドキュメント
+      });
+      
+      // デバッグログ：取得されたドキュメント数とsimilarityスコア
+      if (site_id) {
         console.log(`[RAG] Retrieved ${data?.length || 0} documents for site_id: ${site_id}`);
-        if (data && data.length > 0) {
-          const similarities = data.map((d: any) => d.similarity);
-          console.log(`[RAG] Similarity scores:`, similarities);
-          console.log(`[RAG] Average similarity:`, similarities.reduce((a: number, b: number) => a + b, 0) / similarities.length);
-        } else {
-          console.warn(`[RAG] No documents found for site_id: ${site_id}`);
-        }
-
-        if (error) {
-          throw error;
-        }
-
-        // コンテキストテキストを保存（トークン数計算用）
-        const documents = (data || []).map((row: any) => {
-          usageTracker.contextText += row.content + '\n\n';
-          return new Document({
-            pageContent: row.content,
-            metadata: row.metadata || {},
-          });
-        });
-        
-        return documents;
+      } else {
+        console.log(`[RAG] Retrieved ${data?.length || 0} documents (no site_id filter)`);
       }
-    })();
-  } else {
-    retriever = (vectorStore as any).asRetriever();
-  }
+      if (data && data.length > 0) {
+        const similarities = data.map((d: any) => d.similarity);
+        console.log(`[RAG] Similarity scores:`, similarities);
+        console.log(`[RAG] Average similarity:`, similarities.reduce((a: number, b: number) => a + b, 0) / similarities.length);
+      } else {
+        console.warn(`[RAG] No documents found`);
+      }
+
+      if (error) {
+        throw error;
+      }
+
+      // コンテキストテキストを保存（トークン数計算用）
+      const documents = (data || []).map((row: any) => {
+        usageTracker.contextText += row.content + '\n\n';
+        // metadataからURLを抽出して収集
+        if (row.metadata?.source && typeof row.metadata.source === 'string') {
+          sourceUrls.add(row.metadata.source);
+        }
+        return new Document({
+          pageContent: row.content,
+          metadata: row.metadata || {},
+        });
+      });
+      
+      return documents;
+    }
+  })();
 
   // ストリーミングレスポンスの開始（クォータチェック後に実行）
   res.writeHead(200, {
@@ -294,6 +297,13 @@ export default async function handler(
     console.error('[Chat API] Error:', error);
     sendData(JSON.stringify({ error: String(error) }));
   } finally {
+    // 引用元URLを送信
+    if (sourceUrls.size > 0) {
+      sendData(JSON.stringify({ 
+        sources: Array.from(sourceUrls).filter(url => url && url.trim() !== '')
+      }));
+    }
+    
     if (process.env.NODE_ENV === 'development') {
       console.log('[Chat API] Sending [DONE]');
     }

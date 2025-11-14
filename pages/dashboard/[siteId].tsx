@@ -46,6 +46,7 @@ export default function SiteChat() {
     messages: Message[];
     pending?: string;
     history: [string, string][];
+    sources?: string[]; // 引用元URL（ストリーミング中に一時保存）
   }>({
     messages: [],
     history: [],
@@ -351,9 +352,11 @@ export default function SiteChat() {
                   {
                     type: 'apiMessage',
                     message: state.pending ?? '',
+                    sources: state.sources, // 引用元URLを保存
                   },
                 ],
                 pending: undefined,
+                sources: undefined, // クリア
               };
             });
             setLoading(false);
@@ -378,6 +381,12 @@ export default function SiteChat() {
                 }));
                 setLoading(false);
                 ctrl.abort();
+              } else if (data.sources) {
+                // 引用元URLを受信
+                setMessageState((state) => ({
+                  ...state,
+                  sources: data.sources,
+                }));
               } else {
                 const token = data.data || '';
                 if (process.env.NODE_ENV === 'development') {
@@ -589,9 +598,29 @@ export default function SiteChat() {
                           }`}
                         >
                           {message.type === 'apiMessage' ? (
-                            <ReactMarkdown className="prose prose-sm prose-invert max-w-none break-words">
-                              {message.message}
-                            </ReactMarkdown>
+                            <>
+                              <ReactMarkdown className="prose prose-sm prose-invert max-w-none break-words">
+                                {message.message}
+                              </ReactMarkdown>
+                              {message.sources && message.sources.length > 0 && (
+                                <div className="mt-3 pt-3 border-t border-white/10">
+                                  <p className="text-xs text-slate-400 mb-2">引用元:</p>
+                                  <div className="flex flex-wrap gap-2">
+                                    {message.sources.map((url, idx) => (
+                                      <a
+                                        key={idx}
+                                        href={url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-xs text-emerald-400 hover:text-emerald-300 underline break-all"
+                                      >
+                                        {url}
+                                      </a>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </>
                           ) : (
                             <p className="whitespace-pre-wrap break-words">{message.message}</p>
                           )}

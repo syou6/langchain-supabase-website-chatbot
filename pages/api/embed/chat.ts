@@ -131,6 +131,8 @@ export default async function handler(
       contextText: '',
       embeddingTokens: 0,
     };
+    // 引用元URLを収集する配列
+    const sourceUrls = new Set<string>();
 
     // site_idでフィルタしたカスタムRetrieverを作成
     const { BaseRetriever } = await import('@langchain/core/retrievers');
@@ -160,6 +162,10 @@ export default async function handler(
         // コンテキストテキストを保存（トークン数計算用）
         const documents = (data || []).map((row: any) => {
           usageTracker.contextText += row.content + '\n\n';
+          // metadataからURLを抽出して収集
+          if (row.metadata?.source && typeof row.metadata.source === 'string') {
+            sourceUrls.add(row.metadata.source);
+          }
           return new Document({
             pageContent: row.content,
             metadata: row.metadata || {},
@@ -296,6 +302,13 @@ export default async function handler(
       console.error('[Embed Chat API] Error:', error);
       sendData(JSON.stringify({ error: String(error) }));
     } finally {
+      // 引用元URLを送信
+      if (sourceUrls.size > 0) {
+        sendData(JSON.stringify({ 
+          sources: Array.from(sourceUrls).filter(url => url && url.trim() !== '')
+        }));
+      }
+      
       if (process.env.NODE_ENV === 'development') {
         console.log('[Embed Chat API] Sending [DONE]');
       }

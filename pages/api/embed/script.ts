@@ -159,11 +159,49 @@ function generateEmbedScript(siteId: string, apiBaseUrl: string): string {
   toggleBtn?.addEventListener('click', () => toggleChat());
   closeBtn?.addEventListener('click', () => toggleChat(false));
 
-  function addMessage(text, isUser) {
+  function addMessage(text, isUser, sources) {
     if (!messagesDiv) return;
     const messageDiv = document.createElement('div');
     messageDiv.className = \'sgpt-message \'+ (isUser ? 'user' : 'bot');
-    messageDiv.textContent = text;
+    
+    if (isUser) {
+      messageDiv.textContent = text;
+    } else {
+      // ボットメッセージの場合、テキストと引用元URLを表示
+      const textNode = document.createTextNode(text);
+      messageDiv.appendChild(textNode);
+      
+      if (sources && sources.length > 0) {
+        const sourcesDiv = document.createElement('div');
+        sourcesDiv.style.marginTop = '12px';
+        sourcesDiv.style.paddingTop = '12px';
+        sourcesDiv.style.borderTop = '1px solid rgba(255,255,255,0.1)';
+        sourcesDiv.style.fontSize = '0.75rem';
+        sourcesDiv.style.color = '#94a3b8';
+        
+        const sourcesLabel = document.createElement('div');
+        sourcesLabel.textContent = '引用元:';
+        sourcesLabel.style.marginBottom = '8px';
+        sourcesDiv.appendChild(sourcesLabel);
+        
+        sources.forEach(function(url) {
+          const link = document.createElement('a');
+          link.href = url;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          link.textContent = url;
+          link.style.color = '#34d399';
+          link.style.textDecoration = 'underline';
+          link.style.display = 'block';
+          link.style.marginBottom = '4px';
+          link.style.wordBreak = 'break-all';
+          sourcesDiv.appendChild(link);
+        });
+        
+        messageDiv.appendChild(sourcesDiv);
+      }
+    }
+    
     messagesDiv.appendChild(messageDiv);
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
   }
@@ -212,13 +250,19 @@ function generateEmbedScript(siteId: string, apiBaseUrl: string): string {
 
       const lines = text.split('\\n');
       let answer = '';
+      let sources = [];
       for (const line of lines) {
         if (!line.startsWith('data: ')) continue;
         const payload = line.substring(6);
         if (payload === '[DONE]') break;
         try {
           const parsed = JSON.parse(payload);
-          if (parsed.data) answer += parsed.data;
+          if (parsed.data) {
+            answer += parsed.data;
+          }
+          if (parsed.sources && Array.isArray(parsed.sources)) {
+            sources = parsed.sources;
+          }
         } catch (err) {
           console.warn('WEBGPT embed parse error', err);
         }
@@ -226,7 +270,7 @@ function generateEmbedScript(siteId: string, apiBaseUrl: string): string {
 
       if (answer) {
         const cleaned = answer.split('**').join('');
-        addMessage(cleaned, false);
+        addMessage(cleaned, false, sources);
       } else {
         addMessage('申し訳ございません。回答を取得できませんでした。', false);
       }
