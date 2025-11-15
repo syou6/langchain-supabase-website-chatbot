@@ -106,9 +106,13 @@ function generateEmbedScript(siteId: string, apiBaseUrl: string): string {
     '.sgpt-loading{font-size:.85rem;color:#94a3b8}',
     '.sgpt-widget .sgpt-chip{display:inline-flex;padding:4px 10px;border-radius:999px;background:rgba(52,211,153,.18);color:#a7f3d0;font-size:.75rem;letter-spacing:.15em}',
     '.sgpt-widget .sgpt-footer{padding:0 20px 16px;text-align:center;font-size:.7rem;color:#475569}',
-    '.sgpt-sticky-slot{position:sticky;top:0;z-index:5;margin-bottom:12px;display:flex;justify-content:flex-end}',
-    '.sgpt-sticky-slot .sgpt-message{max-width:80%;font-size:.93rem}',
-    '.sgpt-sticky-slot .sgpt-message.user{box-shadow:0 20px 45px rgba(16,185,129,0.45)}',
+    '.sgpt-sticky-slot{position:sticky;top:0;z-index:5;margin-bottom:12px;display:none;flex-direction:column;gap:6px;padding-bottom:8px;background:linear-gradient(180deg,rgba(3,7,18,0.95),rgba(3,7,18,0))}',
+    '.sgpt-sticky-slot.active{display:flex}',
+    '.sgpt-sticky-question{display:flex;justify-content:flex-end}',
+    '.sgpt-sticky-question .sgpt-message{max-width:80%;font-size:.93rem;box-shadow:0 20px 45px rgba(16,185,129,0.35)}',
+    '.sgpt-sticky-question .sgpt-message.user{box-shadow:0 20px 45px rgba(16,185,129,0.45)}',
+    '.sgpt-sticky-indicator{align-self:flex-end;font-size:.75rem;color:#a5f3fc;display:none;gap:6px;align-items:center}',
+    '.sgpt-sticky-indicator svg{width:14px;height:14px}',
     '.sgpt-scroll-hint{position:absolute;right:24px;bottom:96px;background:rgba(15,23,42,.9);border:1px solid rgba(148,163,184,.4);color:#cbd5f5;padding:8px 14px;border-radius:999px;font-size:.75rem;display:flex;align-items:center;gap:6px;box-shadow:0 15px 40px rgba(2,6,23,.6);opacity:0;pointer-events:none;transition:opacity .25s ease}',
     '.sgpt-scroll-hint svg{width:14px;height:14px}',
     '.sgpt-scroll-hint.is-visible{opacity:1;pointer-events:auto}'
@@ -150,6 +154,13 @@ function generateEmbedScript(siteId: string, apiBaseUrl: string): string {
   const messagesDiv = document.getElementById('webgpt-messages');
   const stickySlot = document.createElement('div');
   stickySlot.className = 'sgpt-sticky-slot';
+  const stickyQuestionWrap = document.createElement('div');
+  stickyQuestionWrap.className = 'sgpt-sticky-question';
+  const thinkingIndicator = document.createElement('div');
+  thinkingIndicator.className = 'sgpt-sticky-indicator';
+  thinkingIndicator.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg><span>考えています…</span>';
+  stickySlot.appendChild(stickyQuestionWrap);
+  stickySlot.appendChild(thinkingIndicator);
   chatContainer?.insertBefore(stickySlot, messagesDiv);
   const inputField = document.getElementById('webgpt-input');
   const sendBtn = document.getElementById('webgpt-send-btn');
@@ -164,13 +175,17 @@ function generateEmbedScript(siteId: string, apiBaseUrl: string): string {
     return el && el instanceof HTMLInputElement ? el : null;
   }
 
+  let autoScroll = true;
+
   function updateScrollHint() {
     if (!messagesDiv) return;
     const nearBottom = messagesDiv.scrollHeight - (messagesDiv.scrollTop + messagesDiv.clientHeight) < 40;
     if (nearBottom) {
       scrollHint.classList.remove('is-visible');
+      autoScroll = true;
     } else {
       scrollHint.classList.add('is-visible');
+      autoScroll = false;
     }
   }
 
@@ -178,9 +193,16 @@ function generateEmbedScript(siteId: string, apiBaseUrl: string): string {
     messagesDiv.addEventListener('scroll', updateScrollHint);
   }
 
-  scrollHint.addEventListener('click', () => {
+  function scrollToBottom(options = { smooth: true }) {
     if (!messagesDiv) return;
-    messagesDiv.scrollTo({ top: messagesDiv.scrollHeight, behavior: 'smooth' });
+    const behavior = options.smooth ? 'smooth' : 'auto';
+    messagesDiv.scrollTo({ top: messagesDiv.scrollHeight, behavior });
+  }
+
+  scrollHint.addEventListener('click', () => {
+    autoScroll = true;
+    scrollHint.classList.remove('is-visible');
+    scrollToBottom({ smooth: true });
   });
 
   function toggleChat(open) {
@@ -209,23 +231,22 @@ function generateEmbedScript(siteId: string, apiBaseUrl: string): string {
     if (isUser) {
       messageDiv.textContent = text;
       if (stickySlot) {
-        stickySlot.innerHTML = '';
-        stickySlot.appendChild(messageDiv);
+        stickyQuestionWrap.innerHTML = '';
+        stickyQuestionWrap.appendChild(messageDiv.cloneNode(true));
+        stickySlot.classList.add('active');
+        thinkingIndicator.style.display = 'flex';
       }
-      if (messagesDiv) {
-        messagesDiv.scrollTop = 0;
-      }
+      messagesDiv.appendChild(messageDiv);
+      autoScroll = true;
       scrollHint.classList.remove('is-visible');
+      scrollToBottom({ smooth: true });
       return;
     }
 
-    // bot message branch
-    {
-      // ボットメッセージの場合、テキストと引用元URLを表示
-      const textNode = document.createTextNode(text);
-      messageDiv.appendChild(textNode);
-      
-      if (sources && sources.length > 0) {
+    const textNode = document.createTextNode(text);
+    messageDiv.appendChild(textNode);
+    
+    if (sources && sources.length > 0) {
         const sourcesDiv = document.createElement('div');
         sourcesDiv.style.marginTop = '12px';
         sourcesDiv.style.paddingTop = '12px';
@@ -254,10 +275,13 @@ function generateEmbedScript(siteId: string, apiBaseUrl: string): string {
         
         messageDiv.appendChild(sourcesDiv);
       }
-    }
 
     messagesDiv.appendChild(messageDiv);
-    updateScrollHint();
+    if (autoScroll) {
+      scrollToBottom({ smooth: true });
+    } else {
+      scrollHint.classList.add('is-visible');
+    }
   }
 
   function showLoading() {
@@ -308,7 +332,9 @@ function generateEmbedScript(siteId: string, apiBaseUrl: string): string {
       streamingMessageDiv.className = 'sgpt-message bot';
       if (messagesDiv) {
         messagesDiv.appendChild(streamingMessageDiv);
-        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        if (autoScroll) {
+          scrollToBottom({ smooth: true });
+        }
       }
 
       const reader = response.body.getReader();
@@ -340,13 +366,14 @@ function generateEmbedScript(siteId: string, apiBaseUrl: string): string {
             }
             try {
               const parsed = JSON.parse(payload);
-              if (parsed.data) {
-                answer += parsed.data;
-                // リアルタイムで更新
-                if (streamingMessageDiv) {
-                  updateStreamingMessage(streamingMessageDiv, answer, sources);
-                }
-              }
+        if (parsed.data) {
+            answer += parsed.data;
+            // リアルタイムで更新
+            if (streamingMessageDiv) {
+              updateStreamingMessage(streamingMessageDiv, answer, sources);
+            }
+            thinkingIndicator.style.display = 'none';
+          }
               if (parsed.sources && Array.isArray(parsed.sources)) {
                 sources = parsed.sources;
                 if (streamingMessageDiv) {
@@ -354,9 +381,9 @@ function generateEmbedScript(siteId: string, apiBaseUrl: string): string {
                 }
               }
             } catch (err) {
-              console.warn('WEBGPT embed parse error', err);
-            }
+            console.warn('WEBGPT embed parse error', err);
           }
+        }
 
           readStream();
         }).catch(error => {
@@ -382,9 +409,8 @@ function generateEmbedScript(siteId: string, apiBaseUrl: string): string {
     // 既存の内容をクリア
     messageDiv.innerHTML = '';
     
-    // テキストを追加
     const textNode = document.createTextNode(text.split('**').join(''));
-      messageDiv.appendChild(textNode);
+    messageDiv.appendChild(textNode);
     
     // 引用元URLを追加
     if (sources && sources.length > 0) {
@@ -416,15 +442,9 @@ function generateEmbedScript(siteId: string, apiBaseUrl: string): string {
       
       messageDiv.appendChild(sourcesDiv);
     }
-    if (stickySlot && stickySlot.firstChild && messagesDiv) {
-      // ensure回答開始部分が見えるように上部へ余白を確保
-      const firstAnswer = messagesDiv.querySelector('.sgpt-message.bot:last-child');
-      if (firstAnswer) {
-        const offset = firstAnswer.offsetTop - messagesDiv.offsetTop;
-        if (offset > 0) {
-          messagesDiv.scrollTop = Math.min(offset, messagesDiv.scrollHeight);
-        }
-      }
+    thinkingIndicator.style.display = 'none';
+    if (autoScroll) {
+      scrollToBottom({ smooth: false });
     }
     updateScrollHint();
   }
