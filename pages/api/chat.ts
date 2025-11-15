@@ -125,7 +125,7 @@ export default async function handler(
   const questionKeywords = sanitizedQuestion
     .toLowerCase()
     .split(/[^\p{Letter}\p{Number}]+/u)
-    .filter((token) => token.length >= 2);
+    .filter((token: string) => token.length >= 2);
 
   const retriever = new (class extends BaseRetriever {
     lc_namespace = ['langchain', 'retrievers', 'supabase'];

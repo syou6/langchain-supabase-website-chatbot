@@ -105,7 +105,10 @@ function generateEmbedScript(siteId: string, apiBaseUrl: string): string {
     '.sgpt-send-btn:disabled{opacity:.6;cursor:not-allowed}',
     '.sgpt-loading{font-size:.85rem;color:#94a3b8}',
     '.sgpt-widget .sgpt-chip{display:inline-flex;padding:4px 10px;border-radius:999px;background:rgba(52,211,153,.18);color:#a7f3d0;font-size:.75rem;letter-spacing:.15em}',
-    '.sgpt-widget .sgpt-footer{padding:0 20px 16px;text-align:center;font-size:.7rem;color:#475569}'
+    '.sgpt-widget .sgpt-footer{padding:0 20px 16px;text-align:center;font-size:.7rem;color:#475569}',
+    '.sgpt-scroll-hint{position:absolute;right:24px;bottom:96px;background:rgba(15,23,42,.9);border:1px solid rgba(148,163,184,.4);color:#cbd5f5;padding:8px 14px;border-radius:999px;font-size:.75rem;display:flex;align-items:center;gap:6px;box-shadow:0 15px 40px rgba(2,6,23,.6);opacity:0;pointer-events:none;transition:opacity .25s ease}',
+    '.sgpt-scroll-hint svg{width:14px;height:14px}',
+    '.sgpt-scroll-hint.is-visible{opacity:1;pointer-events:auto}'
   ].join('');
 
   const styleEl = document.createElement('style');
@@ -144,11 +147,37 @@ function generateEmbedScript(siteId: string, apiBaseUrl: string): string {
   const messagesDiv = document.getElementById('webgpt-messages');
   const inputField = document.getElementById('webgpt-input');
   const sendBtn = document.getElementById('webgpt-send-btn');
+  const scrollHint = document.createElement('button');
+  scrollHint.className = 'sgpt-scroll-hint';
+  scrollHint.setAttribute('type', 'button');
+  scrollHint.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg><span>下へスクロール</span>';
+  chatContainer?.appendChild(scrollHint);
+
+  let anchorMessage = null;
 
   function getInputElement() {
     const el = document.getElementById('webgpt-input');
     return el && el instanceof HTMLInputElement ? el : null;
   }
+
+  function updateScrollHint() {
+    if (!messagesDiv) return;
+    const nearBottom = messagesDiv.scrollHeight - (messagesDiv.scrollTop + messagesDiv.clientHeight) < 40;
+    if (nearBottom) {
+      scrollHint.classList.remove('is-visible');
+    } else {
+      scrollHint.classList.add('is-visible');
+    }
+  }
+
+  if (messagesDiv) {
+    messagesDiv.addEventListener('scroll', updateScrollHint);
+  }
+
+  scrollHint.addEventListener('click', () => {
+    if (!messagesDiv) return;
+    messagesDiv.scrollTo({ top: messagesDiv.scrollHeight, behavior: 'smooth' });
+  });
 
   function toggleChat(open) {
     if (!widget || !chatContainer) return;
@@ -158,6 +187,7 @@ function generateEmbedScript(siteId: string, apiBaseUrl: string): string {
     if (shouldOpen && inputEl) {
       setTimeout(() => inputEl.focus(), 150);
     }
+    updateScrollHint();
   }
 
   if (toggleBtn) {
@@ -174,6 +204,7 @@ function generateEmbedScript(siteId: string, apiBaseUrl: string): string {
     
     if (isUser) {
       messageDiv.textContent = text;
+      anchorMessage = messageDiv;
     } else {
       // ボットメッセージの場合、テキストと引用元URLを表示
       const textNode = document.createTextNode(text);
@@ -211,7 +242,13 @@ function generateEmbedScript(siteId: string, apiBaseUrl: string): string {
     }
     
     messagesDiv.appendChild(messageDiv);
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    if (isUser) {
+      const target = Math.max(messageDiv.offsetTop - 20, 0);
+      messagesDiv.scrollTo({ top: target, behavior: 'smooth' });
+      scrollHint.classList.remove('is-visible');
+    } else {
+      updateScrollHint();
+    }
   }
 
   function showLoading() {
@@ -338,7 +375,7 @@ function generateEmbedScript(siteId: string, apiBaseUrl: string): string {
     
     // テキストを追加
     const textNode = document.createTextNode(text.split('**').join(''));
-    messageDiv.appendChild(textNode);
+      messageDiv.appendChild(textNode);
     
     // 引用元URLを追加
     if (sources && sources.length > 0) {
@@ -370,24 +407,24 @@ function generateEmbedScript(siteId: string, apiBaseUrl: string): string {
       
       messageDiv.appendChild(sourcesDiv);
     }
-    
-    // スクロールを更新
-    if (messagesDiv) {
-      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    if (anchorMessage && messagesDiv) {
+      const target = Math.max(anchorMessage.offsetTop - 20, 0);
+      messagesDiv.scrollTo({ top: target });
     }
+    updateScrollHint();
   }
 
-if (sendBtn) {
-  sendBtn.addEventListener('click', sendMessage);
-}
-if (inputField) {
-  inputField.addEventListener('keypress', function(e) {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      sendMessage();
-    }
-  });
-}
+  if (sendBtn) {
+    sendBtn.addEventListener('click', sendMessage);
+  }
+  if (inputField) {
+    inputField.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+  }
 
   window.WebGPTEmbed = {
     loaded: true,
