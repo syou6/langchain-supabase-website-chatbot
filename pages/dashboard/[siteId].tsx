@@ -8,6 +8,7 @@ import LoadingDots from '@/components/ui/LoadingDots';
 import Link from 'next/link';
 import Button from '@/components/ui/Button';
 import { createSupabaseClient } from '@/utils/supabase-auth';
+import { ChatInput } from '@/components/chat/ChatInput';
 
 interface Site {
   id: string;
@@ -54,7 +55,7 @@ export default function SiteChat() {
 
   const { messages, pending, history } = messageState;
   const messageListRef = useRef<HTMLDivElement>(null);
-  const textAreaRef = useRef<HTMLTextAreaElement>(null);
+  // textAreaRefは削除（ChatInputコンポーネント内で管理されるため）
   const channelRef = useRef<any>(null);
   const [showSidebar, setShowSidebar] = useState(false);
   const supabase = createSupabaseClient();
@@ -217,9 +218,7 @@ export default function SiteChat() {
     };
   }, [siteId, router, authLoading, supabase]);
 
-  useEffect(() => {
-    textAreaRef.current?.focus();
-  }, []);
+  // textAreaRefのフォーカス処理は削除（ChatInputコンポーネント内で管理されるため）
 
   useEffect(() => {
     messageListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -233,20 +232,23 @@ export default function SiteChat() {
   }, [pending, loading]);
 
   // フォーム送信
-  async function handleSubmit(e: any) {
-    e.preventDefault();
+  async function handleSubmit(textOrEvent?: string | any) {
+    // ChatInputから呼ばれる場合は文字列、フォームから呼ばれる場合はイベント
+    const question = typeof textOrEvent === 'string' 
+      ? textOrEvent.trim()
+      : query.trim();
 
-    if (!query || !siteId || typeof siteId !== 'string') {
-      alert('質問を入力してください');
-      return;
+    if (textOrEvent && typeof textOrEvent !== 'string') {
+      textOrEvent.preventDefault();
+    }
+
+    if (!question || !siteId || typeof siteId !== 'string') {
+      return; // alertは削除（UIで無効化されているので不要）
     }
 
     if (site?.status !== 'ready') {
-      alert('サイトの学習が完了していません');
-      return;
+      return; // alertは削除
     }
-
-    const question = query.trim();
 
     setMessageState((state) => ({
       ...state,
@@ -438,13 +440,7 @@ export default function SiteChat() {
     }
   }
 
-  const handleEnter = (e: any) => {
-    if (e.key === 'Enter' && query) {
-      handleSubmit(e);
-    } else if (e.key == 'Enter') {
-      e.preventDefault();
-    }
-  };
+  // handleEnter関数は削除（use-chat-submitで処理されるため）
 
   const chatMessages = useMemo(() => {
     return [
@@ -651,29 +647,17 @@ export default function SiteChat() {
             {/* 入力フォーム */}
             <div className="border-t border-white/10 px-4 py-5 sm:px-6">
               <div className="mx-auto max-w-3xl">
-                <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:flex-row">
-                  <textarea
-                    ref={textAreaRef}
-                    disabled={loading || site.status !== 'ready'}
-                    onKeyDown={handleEnter}
-                    rows={2}
-                    className="flex-1 resize-none rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-400 shadow-[0_15px_35px_rgba(1,5,3,0.35)] backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/70"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder={
-                      site.status === 'ready'
-                        ? '質問を入力してください...'
-                        : 'サイトの学習が完了していません'
-                    }
-                  />
-                  <button
-                    type="submit"
-                    disabled={loading || !query || site.status !== 'ready'}
-                    className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-emerald-400 via-green-300 to-cyan-300 px-6 py-3 text-sm font-semibold text-slate-900 shadow-[0_20px_45px_rgba(16,185,129,0.35)] transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-slate-400"
-                  >
-                    送信
-                  </button>
-                </form>
+                <ChatInput
+                  onSubmit={handleSubmit}
+                  disabled={loading || site.status !== 'ready'}
+                  placeholder={
+                    site.status === 'ready'
+                      ? '質問を入力してください...'
+                      : 'サイトの学習が完了していません'
+                  }
+                  value={query}
+                  onChange={setQuery}
+                />
               </div>
             </div>
           </div>

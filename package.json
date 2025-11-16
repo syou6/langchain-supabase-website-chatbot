@@ -42,7 +42,8 @@
     "react-dom": "18.2.0",
     "react-markdown": "^8.0.5",
     "stripe": "^14.25.0",
-    "tailwind-merge": "^1.10.0"
+    "tailwind-merge": "^1.10.0",
+    "use-chat-submit": "^1.0.0"
   },
   "devDependencies": {
     "@types/node": "^18.14.6",
